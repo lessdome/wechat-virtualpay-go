@@ -106,11 +106,8 @@ func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, e
 		return "", 0, fmt.Errorf("wechat_virtualpay_go: 读取 stable_token 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, &APIError{
-			Message:    http.StatusText(resp.StatusCode),
-			HTTPStatus: resp.StatusCode,
-			Raw:        raw,
-		}
+		return "", 0, fmt.Errorf("wechat_virtualpay_go: stable_token 返回 HTTP %d %s（原始响应: %s）",
+			resp.StatusCode, http.StatusText(resp.StatusCode), raw)
 	}
 
 	var out struct {
@@ -123,7 +120,8 @@ func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, e
 		return "", 0, fmt.Errorf("wechat_virtualpay_go: 解析 stable_token 响应失败: %w（原始响应: %s）", err, raw)
 	}
 	if out.ErrCode != 0 {
-		return "", 0, &APIError{Code: out.ErrCode, Message: out.ErrMsg, Raw: raw}
+		return "", 0, fmt.Errorf("wechat_virtualpay_go: errcode=%d %s（errmsg: %s）",
+			out.ErrCode, ErrorCode(out.ErrCode).ErrorText(), out.ErrMsg)
 	}
 	if out.AccessToken == "" {
 		return "", 0, fmt.Errorf("wechat_virtualpay_go: stable_token 未返回 access_token（原始响应: %s）", raw)

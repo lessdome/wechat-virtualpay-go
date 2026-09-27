@@ -114,11 +114,8 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return &APIError{
-			Message:    http.StatusText(resp.StatusCode),
-			HTTPStatus: resp.StatusCode,
-			Raw:        rawResp,
-		}
+		return fmt.Errorf("wechat_virtualpay_go: %s 返回 HTTP %d %s（原始响应: %s）",
+			uri, resp.StatusCode, http.StatusText(resp.StatusCode), rawResp)
 	}
 
 	var hdr responseHeader
@@ -126,7 +123,9 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 		return fmt.Errorf("wechat_virtualpay_go: 解析 %s 响应失败: %w（原始响应: %s）", uri, err, rawResp)
 	}
 	if hdr.ErrCode != 0 {
-		return &APIError{Code: hdr.ErrCode, Message: hdr.ErrMsg, Raw: rawResp}
+		// 带上微信的 errmsg：好几个码的说明就是「具体看 errmsg」，不能丢。
+		return fmt.Errorf("wechat_virtualpay_go: errcode=%d %s（errmsg: %s）",
+			hdr.ErrCode, ErrorCode(hdr.ErrCode).ErrorText(), hdr.ErrMsg)
 	}
 
 	if out != nil {

@@ -32,15 +32,10 @@ const (
 	EventIOSRefundQuery NotifyEvent = "xpay_subscribe_ios_refund_query_notify"
 )
 
-// notifyContentType 是推送应答的 Content-Type。
+// ErrInvalidSignature 表示推送验签失败。
 //
-// 本包**只支持 JSON**：MP 后台「消息推送配置」里的数据格式要选 JSON，XML 报文本包
-// 不解析。这是本包的取舍，不等于平台只发 JSON——官方对 XML 模式同样有定义。
-//
-// 附带一条容易踩的规则：官方要求**应答格式与推送格式一致**（XML 推送回 XML、JSON
-// 推送回 JSON）。只支持 JSON 时这条自然满足；一旦后台被改成 XML，微信会认为应答
-// 格式不对而重推（最多 15 次）。
-const notifyContentType = "application/json; charset=utf-8"
+// 用 errors.Is(err, ErrInvalidSignature) 判断。注意**签名不过就绝不能发货**。
+var ErrInvalidSignature = errors.New("wechat_virtualpay_go: 推送验签失败")
 
 // Notification 是一次解析后的推送。
 //
@@ -288,31 +283,34 @@ type IOSRefundQueryNotify struct {
 // token 是 MP 后台「开发管理 → 消息推送配置」里的 **Token 令牌**——不是支付凭据，
 // 也别和 AppKey 搞混。
 //
-// 只支持**明文模式**：后台若配成安全模式，报文是 AES 加密的，本方法会直接返回
-// 明确的错误，而不是含糊地解析失败。
+// 只支持 **JSON 报文 + 明文模式**：MP 后台「消息推送配置」里两项都要配对——数据格式
+// 选 JSON、消息加解密方式选明文。配成 XML 或安全模式，推送都会被拒，本方法会直接
+// 返回明确的错误，而不是含糊地解析失败。
+//
+// 另外官方要求**应答格式与推送格式一致**，只支持 JSON 时这条自然满足。
 //
 // 任何一步不过都返回错误，此时 **Notification 为 nil**。返回错误时应当回失败应答
 // 让微信重试——**绝不要在验签失败时仍然发货**。
 //
-// 本方法只管解析，不管应答，也不管你怎么处理：回什么、什么时候回，都由调用方决定
-// （应答用 Ack / AckError / RespondIOSRefundQuery）。
+// 本方法只管解析，不管应答，也不管你怎么处理：回什么、什么时候回，都由调用方决定。
+// 应答体就是两个普通结构体——Ack（普通事件）与 IOSRefundQueryResponse（iOS 退款
+// 问询），本包不做任何加工，json.Marshal 写出去即可。
 //
 // 典型用法：
 //
 //	notif, err := wechat_virtualpay_go.ParseNotification(token, r)
 //	if err != nil {
-//		body, ct := wechat_virtualpay_go.AckError(err) // 让微信重试
-//		w.Header().Set("Content-Type", ct)
-//		w.Write(body)
+//		writeJSON(w, wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()}) // 让微信重试
 //		return
 //	}
+//	ack := wechat_virtualpay_go.Ack{ErrCode: 0, ErrMsg: "success"}
 //	switch notif.Event {
 //	case wechat_virtualpay_go.EventGoodsDeliver:
-//		// 幂等发货…
+//		if err := deliver(notif.GoodsDeliver); err != nil { // 幂等发货…
+//			ack = wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()}
+//		}
 //	}
-//	body, ct := wechat_virtualpay_go.Ack()
-//	w.Header().Set("Content-Type", ct)
-//	w.Write(body)
+//	writeJSON(w, ack)
 func ParseNotification(token string, r *http.Request) (*Notification, error) {
 	if token == "" {
 		return nil, errors.New("wechat_virtualpay_go: token 不能为空（MP 后台「消息推送配置」里的 Token 令牌）")
@@ -440,60 +438,34 @@ func isIOSRefundQueryPayload(plain []byte) bool {
 	return probe.ChannelBill != "" && probe.BundleID != ""
 }
 
-// Ack 生成成功应答（ErrCode=0），表示这条推送已处理完毕、微信不必再推。
+// Ack 是 ErrCode 形态的推送应答，普通推送事件都用它。
 //
-// ⚠️ **务必确认发货真的落地了再回 Ack**——回了成功但没发货，微信不会重试，
+// 本包对应答不做任何加工——直接 json.Marshal 写出去即可，Content-Type 用
+// application/json; charset=utf-8。
+//
+// 成功（微信不再重推）：
+//
+//	Ack{ErrCode: 0, ErrMsg: "success"}
+//
+// ⚠️ **务必确认发货真的落地了再回成功**——回了成功但没发货，微信不会重试，
 // 这笔单就永久丢了。
 //
-// 第二个返回值是 Content-Type，直接写进响应头即可。
-func Ack() (body []byte, contentType string) {
-	body, ct, err := marshalAck(ackPayload{ErrCode: 0, ErrMsg: "success"})
-	if err != nil {
-		// 只可能是 json.Marshal 失败；结构固定，实际到不了这里。
-		return []byte(`{"ErrCode":0,"ErrMsg":"success"}`), notifyContentType
-	}
-	return body, ct
-}
-
-// AckError 生成失败应答（ErrCode=1），微信会按 2、4、8、16… 的间隔重试，最多 15 次。
+// 失败（微信会按 2、4、8、16… 的间隔重试，最多 15 次）：
 //
-// err 会作为 ErrMsg 回给微信、也会出现在日志里，不要塞敏感信息。
-func AckError(cause error) (body []byte, contentType string) {
-	msg := "failed"
-	if cause != nil {
-		msg = cause.Error()
-	}
-	body, ct, err := marshalAck(ackPayload{ErrCode: 1, ErrMsg: msg})
-	if err != nil {
-		return []byte(`{"ErrCode":1,"ErrMsg":"failed"}`), notifyContentType
-	}
-	return body, ct
-}
-
-// ackPayload 是 ErrCode 形态的应答体。
-type ackPayload struct {
+//	Ack{ErrCode: 1, ErrMsg: err.Error()}
+type Ack struct {
 	// ErrCode 应答状态。0 表示成功，其他值微信会重试。
 	ErrCode int `json:"ErrCode"`
-	// ErrMsg 错误信息，用于调试。
+	// ErrMsg 错误信息，用于调试。成功时官方示例给的是 "success"。
 	ErrMsg string `json:"ErrMsg"`
-}
-
-// marshalAck 序列化 ErrCode 形态的应答。
-func marshalAck(p ackPayload) ([]byte, string, error) {
-	body, err := json.Marshal(p)
-	if err != nil {
-		return nil, "", fmt.Errorf("wechat_virtualpay_go: 序列化应答失败: %w", err)
-	}
-	return body, notifyContentType, nil
 }
 
 // IOSRefundQueryResponse 是 iOS 退款问询的应答内容。
 //
-// 用 RespondIOSRefundQuery 生成应答——**不要**回 Ack()，ErrCode 形态对这条问询是
-// 无效应答。
+// 这条问询的应答**不是** Ack 那种 ErrCode 形态，只能用它——回错了微信当无效应答，
+// 而 Apple 只问询三次、每次 3 秒，错过等于把判定权交出去。
 //
-// ⚠️ 必须在 **3 秒内**返回，Apple 会问询三次。不要在这条路径上做耗时操作
-// （查库、调外部接口），否则会被判为「不确定」。
+// ⚠️ 必须在 **3 秒内**返回；这条路径上不要查库、不要调外部接口，否则会被判为「不确定」。
 type IOSRefundQueryResponse struct {
 	// ResultCode 结果码：0-放过，建议退款；1-拦截，拒绝退款。
 	ResultCode int32 `json:"result_code"`
@@ -501,39 +473,4 @@ type IOSRefundQueryResponse struct {
 	ResultInfo string `json:"result_info"`
 	// Evidence 决策凭据（**必填**），业务需给出建议退款/拒绝退款的依据，用于退款审计。
 	Evidence string `json:"evidence"`
-}
-
-// RespondIOSRefundQuery 生成「iOS 退款问询」的应答体。
-//
-// 这条问询与别的推送不一样：官方规定的应答是 IOSRefundQueryResponse 那三个字段，
-// **不是** Ack() 的 ErrCode 形态——回错了微信当无效应答，而 Apple 只问询三次、
-// 每次 3 秒，错过等于把判定权交出去。
-//
-// 用法：
-//
-//	case wechat_virtualpay_go.EventIOSRefundQuery:
-//		// ⚠️ 这条路径只有 3 秒，不要查库、不要调外部接口
-//		body, ct, err := wechat_virtualpay_go.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
-//			ResultCode: 0,
-//			ResultInfo: "已发货，不予退款",
-//			Evidence:   "order 已发货并于 2026-01-01 被领取", // 必填，退款审计凭据
-//		})
-//		if err != nil {
-//			// 兜底：回失败应答让微信重试，别静默返回
-//			body, ct = wechat_virtualpay_go.AckError(err)
-//		}
-//		w.Header().Set("Content-Type", ct)
-//		w.Write(body)
-func RespondIOSRefundQuery(resp IOSRefundQueryResponse) (body []byte, contentType string, err error) {
-	if resp.Evidence == "" {
-		// Evidence 是官方标注的必填项，退款审计要看它。缺了宁可不发，
-		// 也不要送一个微信会判无效的应答上去。
-		return nil, "", errors.New("wechat_virtualpay_go: IOSRefundQueryResponse.Evidence 必填（需给出建议退款/拒绝退款的依据）")
-	}
-
-	plain, err := json.Marshal(resp)
-	if err != nil {
-		return nil, "", fmt.Errorf("wechat_virtualpay_go: 序列化 iOS 退款问询应答失败: %w", err)
-	}
-	return plain, notifyContentType, nil
 }

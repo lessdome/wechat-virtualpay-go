@@ -24,7 +24,7 @@
 | 一致性 JSON 序列化（防 HTML 转义破坏签名） | ✅ 已实现 |
 | 下单参数构建 `BuildVirtualPayment` | ✅ 已实现 |
 | 服务端接口 `/xpay/*`（官方 33 个） | ✅ 已实现 |
-| 推送验签、AES 解密与事件解析（6 类事件） | ✅ 已实现 |
+| 推送验签与事件解析（6 类事件，明文模式） | ✅ 已实现 |
 | `access_token` 获取与缓存 | ✅ 内置（稳定版 `stable_token`）|
 
 ⚠️ **尚未真机联调，且仓库当前不含测试代码。**
@@ -263,100 +263,97 @@ signature = sha1( sort([Token, timestamp, nonce]).join("") )
 
 ### 处理示例
 
-本包只提供两组原语：**解析**和**应答**。中间怎么编排——回什么、什么时候回、要不要
-先落库再应答——全在你的 handler 里，本包不替你决定。
+本包只做两件事：**解析**和**给你应答用的结构体**。中间怎么编排——回什么、什么时候
+回、要不要先落库再应答——全在你的 handler 里，本包不替你决定。应答体就是普通
+struct，`json.Marshal` 写出去即可。
 
 ```go
+// 小工具：把应答体写成响应
+func writeJSON(w http.ResponseWriter, v any) {
+    body, _ := json.Marshal(v)
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.Write(body)
+}
+
 // 在你的 HTTP handler 里：
 notif, err := wechat_virtualpay_go.ParseNotification(os.Getenv("VIRTUALPAY_NOTIFY_TOKEN"), r)
 if err != nil {
     // 验签/格式不过：回失败应答让微信重试，**绝不要发货**
-    body, ct := wechat_virtualpay_go.AckError(err)
-    w.Header().Set("Content-Type", ct)
-    w.Write(body)
+    writeJSON(w, wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()})
     return
 }
 
-var body []byte
-var ct string
+ack := wechat_virtualpay_go.Ack{ErrCode: 0, ErrMsg: "success"}
 switch notif.Event {
 case wechat_virtualpay_go.EventGoodsDeliver:
     if err := deliver(notif.GoodsDeliver); err != nil {
-        body, ct = wechat_virtualpay_go.AckError(err) // 微信会重试
-        break
+        ack = wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()} // 微信会重试
     }
-    body, ct = wechat_virtualpay_go.Ack()
 
 case wechat_virtualpay_go.EventIOSRefundQuery:
     // ⚠️ 这条路径只有 3 秒，不要查库、不要调外部接口
-    body, ct, err = wechat_virtualpay_go.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
+    writeJSON(w, wechat_virtualpay_go.IOSRefundQueryResponse{
         ResultCode: 0, // 0=放过、建议退款；1=拦截、拒绝退款
         ResultInfo: "已发货，不予退款",
         Evidence:   "该订单已于 2026-01-01 发放并被用户领取", // 必填，退款审计要看
     })
-    if err != nil {
-        body, ct = wechat_virtualpay_go.AckError(err)
-    }
+    return
 
 default:
     // 不认识的事件别静默 ack——回失败让它出现在日志里
-    body, ct = wechat_virtualpay_go.AckError(fmt.Errorf("未知事件 %q", notif.Event))
+    ack = wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: "未知事件: " + string(notif.Event)}
 }
-
-w.Header().Set("Content-Type", ct)
-w.Write(body)
+writeJSON(w, ack)
 ```
 
-三个应答函数，覆盖你要决定的全部语义：
+两种应答体，覆盖你要决定的全部语义：
 
-| 函数 | 含义 | 微信的行为 |
+| 结构体 | 含义 | 微信的行为 |
 | --- | --- | --- |
-| `Ack()` | 已处理完毕 | 不再推 |
-| `AckError(err)` | 没处理成功 | 按 2、4、8、16… 重试，最多 15 次 |
-| `RespondIOSRefundQuery(resp)` | iOS 退款问询的答复 | 只对这条问询有效，不含 ErrCode |
+| `Ack{ErrCode: 0, ...}` | 已处理完毕 | 不再推 |
+| `Ack{ErrCode: 1, ErrMsg: err.Error()}` | 没处理成功 | 按 2、4、8、16… 重试，最多 15 次 |
+| `IOSRefundQueryResponse{...}` | iOS 退款问询的答复 | 只对这条问询有效，**不能**用 `Ack` |
 
-应答的**字节一律由本包生成**：JSON 的格式、ErrMsg 的转义、iOS 问询那三个字段的
-拼装，都不需要你碰。
+`ErrMsg` 只用于调试，别塞敏感信息。`IOSRefundQueryResponse.Evidence` 是官方标注的
+必填项——缺了微信当无效应答，而这条问询只问三次。
 
 ### 四条铁律
 
-1. **验签失败绝不发货。** `ParseNotification` 返回错误时 `Notification` 是 nil，直接
-   回 `AckError(err)` 让微信重试即可——**绝不要在验签失败时仍然发货**。
+1. **验签失败绝不发货。** `ParseNotification` 返回错误时 `Notification` 是 nil，回
+   `Ack{ErrCode: 1, ...}` 让微信重试即可——**绝不要在验签失败时仍然发货**。
 2. **用平台单号做幂等。** 发货场景取 `WeChatPayInfo.MchOrderNo` 去重——微信会重试，
    同一单可能推多次。注意该字段**可能为 nil**（官方注明：非微信支付渠道可能没有），
    取值前先判空。
-3. **`Ack()` 是承诺，不是默认值。** 回了成功但没发货，微信不再重试，这笔单就永久丢了。
-   拿不准就回 `AckError(err)`，让微信重推。
+3. **成功应答是承诺，不是默认值。** 回了 `ErrCode: 0` 但没发货，微信不再重试，这笔单
+   就永久丢了。拿不准就回非 0，让微信重推。
 4. **iOS 退款问询有 3 秒硬限制。** `xpay_subscribe_ios_refund_query_notify` 要求 3 秒
-   内应答，Apple 会问询三次。这条路径上不要查库、不要调外部接口，直接调
-   `RespondIOSRefundQuery` 即可。
+   内应答，Apple 会问询三次。这条路径上不要查库、不要调外部接口，直接回一个
+   `IOSRefundQueryResponse` 即可。
 
 「推送」与「轮询 `QueryOrder`」建议**都实现**：`success` 回调可能丢失（用户异常
 退出），推送也可能丢失，两者互补最可靠。
 
 ## 错误处理
 
-所有接口失败时返回 `*APIError`，它带上了微信的 `errcode` / `errmsg` 与**原始响应体**：
+接口失败时返回普通 `error`，文案里带着微信的**业务错误码**、该码的中文说明，以及
+微信自己的 `errmsg`——直接打日志就够用：
 
-```go
-order, err := client.QueryOrder(ctx, req)
-if err != nil {
-    var apiErr *wechat_virtualpay_go.APIError
-    if errors.As(err, &apiErr) {
-        log.Printf("errcode=%d errmsg=%s hint=%s",
-            apiErr.Code, apiErr.Message, apiErr.Hint())
-        log.Printf("原始响应: %s", apiErr.Raw)
-    }
-    return err
-}
+```
+wechat_virtualpay_go: errcode=268490009 用户 session_key 不存在或已过期，请重新登录——让前端重新 wx.login，再用 code 换新的 session_key（errmsg: session_key expired）
 ```
 
-`APIError.Hint()` 针对高频错误码给出排查方向，`IsCode` 用于判断特定错误：
+错误码常量（23 个，见 `errors.go`）和它们的中文说明都在 `errors.go`，用
+`ErrorCode.ErrorText()` 取：
 
 ```go
-if wechat_virtualpay_go.IsCode(err, wechat_virtualpay_go.ErrCodeSessionKeyExpired) {
-    // session_key 过期，让前端重新 wx.login
-}
+code := wechat_virtualpay_go.ErrCodeSessionKeyExpired
+log.Printf("errcode=%d %s", int(code), code.ErrorText())
+```
+
+非业务错误（HTTP 层失败、响应解析失败）的文案是另一种形状：
+
+```
+wechat_virtualpay_go: /xpay/query_order 返回 HTTP 502 Bad Gateway（原始响应: ...）
 ```
 
 常见错误码（完整列表见 `errors.go`）：
