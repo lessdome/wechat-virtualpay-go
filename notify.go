@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
-	"time"
 )
 
 // NotifyEvent 是虚拟支付推送的事件类型。
@@ -44,59 +42,13 @@ const (
 // 格式不对而重推（最多 15 次）。
 const notifyContentType = "application/json; charset=utf-8"
 
-// NotifyConfig 是推送接收端的配置。
-//
-// 这些值**不是**支付凭据，请在 MP 后台「开发管理 → 消息推送配置」里查看/设置。
-type NotifyConfig struct {
-	// AppID 小程序 AppID。用于校验解密结果里携带的 appid，防止重放他人报文。
-	AppID string
-	// Token 消息推送配置里的「Token 令牌」，用于验签。**与 AppKey 无关。**
-	Token string
-	// EncodingAESKey 消息加解密密钥（43 个字符）。
-	//
-	// 留空表示只处理**明文模式**；填了才能处理**安全模式**。
-	// 兼容模式（明文密文共存）本包不支持——微信本身也不建议用。
-	EncodingAESKey string
-}
-
-// Notifier 负责推送的验签、解密与解析。它是并发安全的（无可变状态）。
-type Notifier struct {
-	appID string
-	// notifyToken 是 MP 后台「消息推送配置」里的令牌，用于验签。
-	// 与 access_token 是两回事，命名上刻意区分开。
-	notifyToken string
-	aesKey      []byte // nil 表示只支持明文模式
-}
-
-// NewNotifier 校验配置并构造 Notifier。
-func NewNotifier(cfg NotifyConfig) (*Notifier, error) {
-	if cfg.AppID == "" {
-		return nil, errors.New("wechat_virtualpay_go: NotifyConfig.AppID 不能为空")
-	}
-	if cfg.Token == "" {
-		return nil, errors.New("wechat_virtualpay_go: NotifyConfig.Token 不能为空（MP 后台消息推送配置里的令牌）")
-	}
-	n := &Notifier{appID: cfg.AppID, notifyToken: cfg.Token}
-	if cfg.EncodingAESKey != "" {
-		key, err := decodeAESKey(cfg.EncodingAESKey)
-		if err != nil {
-			return nil, err
-		}
-		n.aesKey = key
-	}
-	return n, nil
-}
-
-// SupportsEncrypted 表示是否配置了 EncodingAESKey（即能否处理安全模式）。
-func (n *Notifier) SupportsEncrypted() bool { return n.aesKey != nil }
-
 // Notification 是一次解析后的推送。
 //
 // 按 Event 判断类型，并从对应的字段取事件数据；其余字段为 nil。
 type Notification struct {
 	// Event 事件类型。
 	Event NotifyEvent
-	// Plain 解密后的明文原文（明文模式下即原始请求体）。
+	// Plain 原始请求体。
 	//
 	// 可直接落库备查：里面有完整的业务字段，将来排查争议时很有用。
 	Plain []byte
@@ -331,26 +283,40 @@ type IOSRefundQueryNotify struct {
 	PayOrderID string `json:"pay_order_id"`
 }
 
-// ParseNotification 解析一次推送：读请求体 → 验签（必要时解密）→ 识别事件 → 反序列化。
+// ParseNotification 解析一次推送：读请求体 → 验签 → 识别事件 → 反序列化为对应结构。
 //
-// 这是接收推送的**唯一入口**，把 HTTP 请求交给它即可。明文模式与安全模式由 URL 上的
-// encrypt_type=aes 自动区分，不需要调用方指定。
+// token 是 MP 后台「开发管理 → 消息推送配置」里的 **Token 令牌**——不是支付凭据，
+// 也别和 AppKey 搞混。
 //
-// 任何一步不过都返回错误——调用方应当把错误直接回给微信（回失败应答让它重试），
-// **绝不要在验签失败时仍然发货**。
+// 只支持**明文模式**：后台若配成安全模式，报文是 AES 加密的，本方法会直接返回
+// 明确的错误，而不是含糊地解析失败。
+//
+// 任何一步不过都返回错误，此时 **Notification 为 nil**。返回错误时应当回失败应答
+// 让微信重试——**绝不要在验签失败时仍然发货**。
+//
+// 本方法只管解析，不管应答，也不管你怎么处理：回什么、什么时候回，都由调用方决定
+// （应答用 Ack / AckError / RespondIOSRefundQuery）。
 //
 // 典型用法：
 //
-//	notif, err := notifier.ParseNotification(r)
+//	notif, err := wechat_virtualpay_go.ParseNotification(token, r)
 //	if err != nil {
-//		// 回一个失败应答，让微信重试；不要发货
+//		body, ct := wechat_virtualpay_go.AckError(err) // 让微信重试
+//		w.Header().Set("Content-Type", ct)
+//		w.Write(body)
+//		return
 //	}
 //	switch notif.Event {
 //	case wechat_virtualpay_go.EventGoodsDeliver:
 //		// 幂等发货…
 //	}
 //	body, ct := wechat_virtualpay_go.Ack()
-func (n *Notifier) ParseNotification(r *http.Request) (*Notification, error) {
+//	w.Header().Set("Content-Type", ct)
+//	w.Write(body)
+func ParseNotification(token string, r *http.Request) (*Notification, error) {
+	if token == "" {
+		return nil, errors.New("wechat_virtualpay_go: token 不能为空（MP 后台「消息推送配置」里的 Token 令牌）")
+	}
 	body, err := readAllLimited(r)
 	if err != nil {
 		return nil, err
@@ -367,56 +333,32 @@ func (n *Notifier) ParseNotification(r *http.Request) (*Notification, error) {
 		return nil, errors.New("wechat_virtualpay_go: 推送请求缺少 timestamp 或 nonce")
 	}
 
-	// 安全模式靠 encrypt_type=aes 判定，而不是靠有无 Encrypt——
-	// 明文模式同样可能带 signature 参数。
-	encrypted := query.Get("encrypt_type") == "aes"
-
-	plain := body
-	if encrypted {
-		if n.aesKey == nil {
-			return nil, errors.New("wechat_virtualpay_go: 收到安全模式推送，但 NotifyConfig 未配置 EncodingAESKey")
-		}
-		var envelope struct {
-			Encrypt string `json:"Encrypt"`
-		}
-		if err := json.Unmarshal(body, &envelope); err != nil {
-			return nil, fmt.Errorf("wechat_virtualpay_go: 解析安全模式信封失败: %w", err)
-		}
-		if envelope.Encrypt == "" {
-			return nil, errors.New("wechat_virtualpay_go: 安全模式推送里没有 Encrypt 字段")
-		}
-		// ⚠️ 安全模式必须用 msg_signature 校验，官方文档明确警告不要用 signature。
-		if !verifyEncryptedSignature(n.notifyToken, timestamp, nonce, envelope.Encrypt, query.Get("msg_signature")) {
-			return nil, ErrInvalidSignature
-		}
-		decrypted, err := aesDecrypt(n.aesKey, envelope.Encrypt, n.appID)
-		if err != nil {
-			return nil, err
-		}
-		plain = decrypted
-	} else {
-		if !verifyPlainSignature(n.notifyToken, timestamp, nonce, query.Get("signature")) {
-			return nil, ErrInvalidSignature
-		}
+	// 本包只支持明文模式。后台若配成安全模式，报文是 AES 加密的，这里直接说清楚，
+	// 而不是丢一个含糊的「解析失败」出去。
+	if query.Get("encrypt_type") == "aes" {
+		return nil, errors.New("wechat_virtualpay_go: 收到安全模式推送，但本包只支持明文模式——请到 MP 后台把「消息加解密方式」改为明文模式")
+	}
+	if !verifySignature(token, timestamp, nonce, query.Get("signature")) {
+		return nil, ErrInvalidSignature
 	}
 
 	// 以下：识别事件类型并反序列化到对应结构。
 	var header struct {
 		Event string `json:"Event"`
 	}
-	if err := json.Unmarshal(plain, &header); err != nil {
+	if err := json.Unmarshal(body, &header); err != nil {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析推送事件头失败: %w", err)
 	}
 
 	notif := &Notification{
 		Event: NotifyEvent(header.Event),
-		Plain: plain,
+		Plain: body,
 	}
 
 	// iOS 退款问询是特殊的一类：它的报文**不带 Event 字段**（字段全是 snake_case），
 	// 上面的分派识别不到。用它的特征字段兜底认出来。
 	if notif.Event == "" {
-		if !isIOSRefundQueryPayload(plain) {
+		if !isIOSRefundQueryPayload(body) {
 			// 完全没有 Event，说明这根本不是一条推送。
 			// ⚠️ 这里**不能**放行：调用方会把「解析成功」当成「收到了真实推送」，
 			// 照常回成功应答，微信便不再重推——这条推送就永久丢了。
@@ -454,7 +396,7 @@ func (n *Notifier) ParseNotification(r *http.Request) (*Notification, error) {
 		return notif, nil
 	}
 
-	if err := json.Unmarshal(plain, target); err != nil {
+	if err := json.Unmarshal(body, target); err != nil {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
@@ -498,7 +440,37 @@ func isIOSRefundQueryPayload(plain []byte) bool {
 	return probe.ChannelBill != "" && probe.BundleID != ""
 }
 
-// ackPayload 是虚拟支付推送的应答体。
+// Ack 生成成功应答（ErrCode=0），表示这条推送已处理完毕、微信不必再推。
+//
+// ⚠️ **务必确认发货真的落地了再回 Ack**——回了成功但没发货，微信不会重试，
+// 这笔单就永久丢了。
+//
+// 第二个返回值是 Content-Type，直接写进响应头即可。
+func Ack() (body []byte, contentType string) {
+	body, ct, err := marshalAck(ackPayload{ErrCode: 0, ErrMsg: "success"})
+	if err != nil {
+		// 只可能是 json.Marshal 失败；结构固定，实际到不了这里。
+		return []byte(`{"ErrCode":0,"ErrMsg":"success"}`), notifyContentType
+	}
+	return body, ct
+}
+
+// AckError 生成失败应答（ErrCode=1），微信会按 2、4、8、16… 的间隔重试，最多 15 次。
+//
+// err 会作为 ErrMsg 回给微信、也会出现在日志里，不要塞敏感信息。
+func AckError(cause error) (body []byte, contentType string) {
+	msg := "failed"
+	if cause != nil {
+		msg = cause.Error()
+	}
+	body, ct, err := marshalAck(ackPayload{ErrCode: 1, ErrMsg: msg})
+	if err != nil {
+		return []byte(`{"ErrCode":1,"ErrMsg":"failed"}`), notifyContentType
+	}
+	return body, ct
+}
+
+// ackPayload 是 ErrCode 形态的应答体。
 type ackPayload struct {
 	// ErrCode 应答状态。0 表示成功，其他值微信会重试。
 	ErrCode int `json:"ErrCode"`
@@ -506,34 +478,19 @@ type ackPayload struct {
 	ErrMsg string `json:"ErrMsg"`
 }
 
-// Ack 生成成功应答（等价于 ErrCode=0）。
-//
-// 应答成功即表示"已处理完，别再推了"。**务必确认发货真的落地了再回成功**——
-// 回了成功但没发货，微信不会重试，这笔单就永久丢了。
-//
-// 第二个返回值是 Content-Type，直接写进响应头即可。
-func Ack() (body []byte, contentType string) {
-	return marshalAck(ackPayload{ErrCode: 0, ErrMsg: "success"})
-}
-
-// AckError 生成失败应答，微信会按 2、4、8、16… 的间隔重试，最多 15 次。
-func AckError(errCode int, errMsg string) (body []byte, contentType string) {
-	return marshalAck(ackPayload{ErrCode: errCode, ErrMsg: errMsg})
-}
-
-func marshalAck(p ackPayload) ([]byte, string) {
+// marshalAck 序列化 ErrCode 形态的应答。
+func marshalAck(p ackPayload) ([]byte, string, error) {
 	body, err := json.Marshal(p)
 	if err != nil {
-		// 结构固定（一个 int、一个 string），json.Marshal 不会失败；兜底给个合法应答。
-		return []byte(`{"ErrCode":0,"ErrMsg":"success"}`), notifyContentType
+		return nil, "", fmt.Errorf("wechat_virtualpay_go: 序列化应答失败: %w", err)
 	}
-	return body, notifyContentType
+	return body, notifyContentType, nil
 }
 
 // IOSRefundQueryResponse 是 iOS 退款问询的应答内容。
 //
-// 用它构造应答请调 Notifier.RespondIOSRefundQuery——**不要**用 Ack()，
-// 那个产出的是 ErrCode 形态，对这条问询是无效应答。
+// 用 RespondIOSRefundQuery 生成应答——**不要**回 Ack()，ErrCode 形态对这条问询是
+// 无效应答。
 //
 // ⚠️ 必须在 **3 秒内**返回，Apple 会问询三次。不要在这条路径上做耗时操作
 // （查库、调外部接口），否则会被判为「不确定」。
@@ -546,73 +503,28 @@ type IOSRefundQueryResponse struct {
 	Evidence string `json:"evidence"`
 }
 
-// EncryptResponse 在安全模式下加密一段应答明文。
-//
-// 安全模式的**普通应答**（ErrCode 那种）无需加密，直接回即可；本方法用于需要返回
-// **结构化内容**的场景，典型是 iOS 退款问询。
-//
-// nonce 要传**请求 URL 上的 nonce 原值**——微信要求回包的 Nonce 与请求一致。
-//
-// 官方要求的加密回包是**四个字段，缺一不可**：
-//
-//	Encrypt + MsgSignature + TimeStamp + Nonce
-//
-// 其中 MsgSignature = sha1( sort([Token, TimeStamp, Nonce, Encrypt]) )。
-// 少了任何一个，微信都视为无效应答；iOS 退款问询在「3 秒 / 3 次」的约束下会直接
-// 被判为「不确定」。
-func (n *Notifier) EncryptResponse(plain []byte, nonce string) ([]byte, error) {
-	if n.aesKey == nil {
-		return nil, errors.New("wechat_virtualpay_go: 未配置 EncodingAESKey，无法加密应答（明文模式直接返回明文即可）")
-	}
-	if nonce == "" {
-		return nil, errors.New("wechat_virtualpay_go: EncryptResponse 需要请求 URL 上的 nonce 原值")
-	}
-
-	random16, err := randomBytes(16)
-	if err != nil {
-		return nil, err
-	}
-	encrypt, err := aesEncrypt(string(n.aesKey), n.appID, plain, random16)
-	if err != nil {
-		return nil, err
-	}
-
-	timeStamp := time.Now().Unix()
-	msgSignature := sha1SortedHex(n.notifyToken, strconv.FormatInt(timeStamp, 10), nonce, encrypt)
-
-	envelope := struct {
-		Encrypt      string `json:"Encrypt"`
-		MsgSignature string `json:"MsgSignature"`
-		TimeStamp    int64  `json:"TimeStamp"`
-		Nonce        string `json:"Nonce"`
-	}{encrypt, msgSignature, timeStamp, nonce}
-	return json.Marshal(envelope)
-}
-
 // RespondIOSRefundQuery 生成「iOS 退款问询」的应答体。
 //
 // 这条问询与别的推送不一样：官方规定的应答是 IOSRefundQueryResponse 那三个字段，
-// **不是** Ack() 的 ErrCode 形态——回错了微信会当无效应答，而 Apple 只问询三次、
-// 每次 3 秒，错过就等于把判定权交出去了。
-//
-// 明文模式直接回明文 JSON，nonce 传空串即可；安全模式（配了 EncodingAESKey）会自动
-// 加密并把 Nonce/MsgSignature/TimeStamp 一并带上，此时 nonce 要传**请求 URL 上的
-// nonce 原值**。
+// **不是** Ack() 的 ErrCode 形态——回错了微信当无效应答，而 Apple 只问询三次、
+// 每次 3 秒，错过等于把判定权交出去。
 //
 // 用法：
 //
 //	case wechat_virtualpay_go.EventIOSRefundQuery:
-//		body, ct, err := notifier.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
+//		// ⚠️ 这条路径只有 3 秒，不要查库、不要调外部接口
+//		body, ct, err := wechat_virtualpay_go.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
 //			ResultCode: 0,
 //			ResultInfo: "已发货，不予退款",
 //			Evidence:   "order 已发货并于 2026-01-01 被领取", // 必填，退款审计凭据
-//		}, r.URL.Query().Get("nonce"))
+//		})
 //		if err != nil {
 //			// 兜底：回失败应答让微信重试，别静默返回
+//			body, ct = wechat_virtualpay_go.AckError(err)
 //		}
 //		w.Header().Set("Content-Type", ct)
 //		w.Write(body)
-func (n *Notifier) RespondIOSRefundQuery(resp IOSRefundQueryResponse, nonce string) (body []byte, contentType string, err error) {
+func RespondIOSRefundQuery(resp IOSRefundQueryResponse) (body []byte, contentType string, err error) {
 	if resp.Evidence == "" {
 		// Evidence 是官方标注的必填项，退款审计要看它。缺了宁可不发，
 		// 也不要送一个微信会判无效的应答上去。
@@ -623,31 +535,5 @@ func (n *Notifier) RespondIOSRefundQuery(resp IOSRefundQueryResponse, nonce stri
 	if err != nil {
 		return nil, "", fmt.Errorf("wechat_virtualpay_go: 序列化 iOS 退款问询应答失败: %w", err)
 	}
-
-	// 明文模式不需要签名，直接回明文。
-	if n.aesKey == nil {
-		return plain, notifyContentType, nil
-	}
-
-	encrypted, err := n.EncryptResponse(plain, nonce)
-	if err != nil {
-		return nil, "", err
-	}
-	return encrypted, notifyContentType, nil
+	return plain, notifyContentType, nil
 }
-
-// IsKnownEvent 判断事件类型是否为本包已知的 6 类之一。
-//
-// Parse 对未知事件不报错（微信可能新增事件），用本方法可以区分
-// 「已知事件」与「将来新增的事件」。
-func (e NotifyEvent) IsKnownEvent() bool {
-	switch e {
-	case EventGoodsDeliver, EventCoinPay, EventRefund,
-		EventComplaint, EventWxpayCallback, EventIOSRefundQuery:
-		return true
-	}
-	return false
-}
-
-// String 便于日志输出。
-func (e NotifyEvent) String() string { return string(e) }

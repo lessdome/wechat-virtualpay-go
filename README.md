@@ -29,10 +29,9 @@
 
 ⚠️ **尚未真机联调，且仓库当前不含测试代码。**
 
-以上实现均依据官方文档。签名与加解密算法在开发阶段用微信文档正文里自带 `assert`
-的样例做过验证（包括加密结果与官方密文逐字节一致、205→224 的 PKCS#7 填充长度），
-但**这些测试没有被保留在仓库里**，而请求字段、必填项、错误码这些本来也不是单元
-测试能覆盖的，必须在真实环境中确认。
+以上实现均依据官方文档。支付签名算法在开发阶段用微信文档正文里自带 `assert` 的样例
+做过验证，但**这些测试没有被保留在仓库里**，而请求字段、必填项、错误码这些本来就
+不是单元测试能覆盖的，必须在真实环境中确认。
 
 官方文档本身存在若干自相矛盾之处，本包按更可靠的一方实现，并在源码注释中逐条
 标注了存疑点与改法：
@@ -236,15 +235,15 @@ bal, err := client.QueryUserBalance(ctx, sessionKey, wechat_virtualpay_go.QueryU
 验签机制与支付签名**毫无关系**：
 
 ```
-明文模式   signature     = sha1( sort([Token, timestamp, nonce]).join("") )
-安全模式   msg_signature = sha1( sort([Token, timestamp, nonce, Encrypt]).join("") )
+signature = sha1( sort([Token, timestamp, nonce]).join("") )
 ```
 
-`Token` 是你在 MP 后台自填的令牌，**不是 AppKey**；参数在 URL query 上。
-安全模式下报文是 AES-256-CBC 加密的，需要 `EncodingAESKey`。
+`Token` 是你在 MP 后台自填的令牌，**不是 AppKey**；签名参数在 URL query 上。
+把它作为**第一个参数**传给 `ParseNotification` 即可——本包没有需要提前构造的对象。
 
-> ⚠️ **本包只支持 JSON 报文。** MP 后台「消息推送配置」里的数据格式请选 **JSON**，
-> 选 XML 的话推送会解析失败。应答同样只回 JSON。
+> ⚠️ **本包只支持 JSON 报文 + 明文模式。** MP 后台「消息推送配置」里两项都要配对：
+> 数据格式选 **JSON**，消息加解密方式选 **明文**。配成 XML 或安全模式，推送都会
+> 被拒绝（库会给出明确的报错，而不是含糊的解析失败）。
 >
 > 官方要求**应答格式与推送格式一致**（XML 推送回 XML、JSON 推送回 JSON）。只支持
 > JSON 时这条自然满足；但若后台被改成 XML，微信会认为应答格式不对并重推（最多 15 次）。
@@ -260,62 +259,77 @@ bal, err := client.QueryUserBalance(ctx, sessionKey, wechat_virtualpay_go.QueryU
 | 微信支付风控事件通知 | `xpay_wxpay_callback_notify` | `WxpayCallbackNotify` |
 | iOS 退款问询推送 | `xpay_subscribe_ios_refund_query_notify` | `IOSRefundQueryNotify` |
 
-`ParseNotification` 返回的 `Notification` 上，只有与 `Event` 对应的那个字段非 nil。
+`ParseNotification` 解析出的 `Notification` 上，只有与 `Event` 对应的那个字段非 nil。
 
 ### 处理示例
 
-```go
-notifier, err := wechat_virtualpay_go.NewNotifier(wechat_virtualpay_go.NotifyConfig{
-    AppID:          "wx...",
-    Token:          os.Getenv("VIRTUALPAY_NOTIFY_TOKEN"),
-    EncodingAESKey: os.Getenv("VIRTUALPAY_AES_KEY"), // 留空则只支持明文模式
-})
-if err != nil {
-    log.Fatal(err)
-}
+本包只提供两组原语：**解析**和**应答**。中间怎么编排——回什么、什么时候回、要不要
+先落库再应答——全在你的 handler 里，本包不替你决定。
 
+```go
 // 在你的 HTTP handler 里：
-notif, err := notifier.ParseNotification(r)
+notif, err := wechat_virtualpay_go.ParseNotification(os.Getenv("VIRTUALPAY_NOTIFY_TOKEN"), r)
 if err != nil {
-    // 验签/解密失败：回失败应答让微信重试，**绝不要发货**
-    body, ct := wechat_virtualpay_go.AckError(1, err.Error())
+    // 验签/格式不过：回失败应答让微信重试，**绝不要发货**
+    body, ct := wechat_virtualpay_go.AckError(err)
     w.Header().Set("Content-Type", ct)
     w.Write(body)
     return
 }
 
+var body []byte
+var ct string
 switch notif.Event {
 case wechat_virtualpay_go.EventGoodsDeliver:
-    g := notif.GoodsDeliver
-    // 用 g.WeChatPayInfo.MchOrderNo 做幂等去重，发货…
+    if err := deliver(notif.GoodsDeliver); err != nil {
+        body, ct = wechat_virtualpay_go.AckError(err) // 微信会重试
+        break
+    }
+    body, ct = wechat_virtualpay_go.Ack()
 
 case wechat_virtualpay_go.EventIOSRefundQuery:
-    // ⚠️ 这条问询的应答**不是** Ack() 那种 ErrCode 形态，必须用 RespondIOSRefundQuery。
-    body, ct, err := notifier.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
-        ResultCode: 0,                              // 0=放过、建议退款；1=拦截、拒绝退款
+    // ⚠️ 这条路径只有 3 秒，不要查库、不要调外部接口
+    body, ct, err = wechat_virtualpay_go.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
+        ResultCode: 0, // 0=放过、建议退款；1=拦截、拒绝退款
         ResultInfo: "已发货，不予退款",
         Evidence:   "该订单已于 2026-01-01 发放并被用户领取", // 必填，退款审计要看
-    }, r.URL.Query().Get("nonce")) // 安全模式下必须是请求 URL 上的 nonce 原值
+    })
     if err != nil {
-        body, ct = wechat_virtualpay_go.AckError(1, err.Error())
+        body, ct = wechat_virtualpay_go.AckError(err)
     }
-    w.Header().Set("Content-Type", ct)
-    w.Write(body)
-    return
+
+default:
+    // 不认识的事件别静默 ack——回失败让它出现在日志里
+    body, ct = wechat_virtualpay_go.AckError(fmt.Errorf("未知事件 %q", notif.Event))
 }
 
-body, contentType := wechat_virtualpay_go.Ack() // {"ErrCode":0,"ErrMsg":"success"}
+w.Header().Set("Content-Type", ct)
+w.Write(body)
 ```
 
-### 三条铁律
+三个应答函数，覆盖你要决定的全部语义：
 
-1. **验签失败绝不发货。** 无论出了什么错，回失败应答让微信重试即可；回了成功但没
-   发货，微信不再重试，这单就永久丢了。
+| 函数 | 含义 | 微信的行为 |
+| --- | --- | --- |
+| `Ack()` | 已处理完毕 | 不再推 |
+| `AckError(err)` | 没处理成功 | 按 2、4、8、16… 重试，最多 15 次 |
+| `RespondIOSRefundQuery(resp)` | iOS 退款问询的答复 | 只对这条问询有效，不含 ErrCode |
+
+应答的**字节一律由本包生成**：JSON 的格式、ErrMsg 的转义、iOS 问询那三个字段的
+拼装，都不需要你碰。
+
+### 四条铁律
+
+1. **验签失败绝不发货。** `ParseNotification` 返回错误时 `Notification` 是 nil，直接
+   回 `AckError(err)` 让微信重试即可——**绝不要在验签失败时仍然发货**。
 2. **用平台单号做幂等。** 发货场景取 `WeChatPayInfo.MchOrderNo` 去重——微信会重试，
-   同一单可能推多次。
-3. **iOS 退款问询有 3 秒硬限制。** `xpay_subscribe_ios_refund_query_notify` 要求 3 秒
-   内应答，Apple 会问询三次。这条路径上不要查库、不要调外部接口。另外它的应答体
-   **不是** `Ack()` 那种形态，要用 `RespondIOSRefundQuery`（见上面的处理示例）。
+   同一单可能推多次。注意该字段**可能为 nil**（官方注明：非微信支付渠道可能没有），
+   取值前先判空。
+3. **`Ack()` 是承诺，不是默认值。** 回了成功但没发货，微信不再重试，这笔单就永久丢了。
+   拿不准就回 `AckError(err)`，让微信重推。
+4. **iOS 退款问询有 3 秒硬限制。** `xpay_subscribe_ios_refund_query_notify` 要求 3 秒
+   内应答，Apple 会问询三次。这条路径上不要查库、不要调外部接口，直接调
+   `RespondIOSRefundQuery` 即可。
 
 「推送」与「轮询 `QueryOrder`」建议**都实现**：`success` 回调可能丢失（用户异常
 退出），推送也可能丢失，两者互补最可靠。

@@ -25,8 +25,10 @@
 // # 推送验签是另一套机制
 //
 // 消息推送的验签**不是** HMAC、也不使用 AppKey：它走微信标准「消息推送配置」通道，
-// 用开发者在 MP 后台自填的 Token 做 SHA-1 排序签名（见 notify.go 的 Notifier）。
-// 安全模式下报文还会用 EncodingAESKey 做 AES-256-CBC 加密。
+// 用开发者在 MP 后台自填的 Token 做 SHA-1 排序签名（见 notify.go 的 ParseNotification）。
+//
+// 本包只支持**明文模式**——MP 后台的「消息加解密方式」请选明文模式；安全模式
+// （AES 加密 + msg_signature）本包不处理。
 //
 // 这两套东西容易混，但它们毫无关系。
 //
