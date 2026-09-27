@@ -186,9 +186,11 @@ type PresentCurrencyResponse struct {
 // 重复操作（268490004）为止——也就是说，重试是安全的，但也拿不到「查一下到底
 // 赠出去没有」的能力。
 //
-// ⚠️ 文档存疑：本接口的 query 参数表只有 access_token，没有 pay_sig，但其请求体
-// 里的 env 注释写着「仅作为签名校验」。本包暂按参数表实现（不加签名）。若实测
-// 返回 268490003，把下面的 authAccessTokenOnly 改为 authPaySig 即可。
+// 鉴权按文档的 query 参数表实现：只有 access_token，不加 pay_sig。本页 env 只写
+// 「0-正式环境 1-沙箱环境」，没有「仅作为签名校验」那句——那是广告金那批页面上的
+// 模板文字，本页并不存在这个「矛盾」。
+//
+// 若实测返回 268490003（签名错误），把下面的 authAccessTokenOnly 改为 authPaySig 即可。
 //
 // 官方文档：POST /xpay/present_currency
 func (c *Client) PresentCurrency(ctx context.Context, req PresentCurrencyRequest) (*PresentCurrencyResponse, error) {

@@ -174,8 +174,8 @@ type RefundOrderResponse struct {
 // 注意：本接口只是**启动退款任务**，返回成功不代表退款已完成。启动后需调用
 // QueryOrder 查询退款单状态，等状态变为 OrderStatusRefundCompleted 才是最终成功。
 //
-// iOS 订单无法通过本接口退款——Apple IAP 由用户向 App Store 申请，开发者只能
-// 被动接收 xpay_subscribe_ios_refund_query_notify 问询。
+// iOS 订单不适用主动退款：Apple IAP 由用户向 App Store 申请，开发者只能被动接收
+// xpay_subscribe_ios_refund_query_notify 问询（这点属业务事实，本页文档并未写明）。
 //
 // ⚠️ 文档存疑：本接口的「注意事项」写着「使用用户态签名与支付签名」，但其 query
 // 参数表只列了 access_token 与 pay_sig（没有 signature），且该段落与其它接口的
@@ -208,9 +208,14 @@ type NotifyProvideGoodsRequest struct {
 // 正常情况下，正确应答 xpay_goods_deliver_notify 推送即可，无需调用本接口。
 // 本接口用于推送异常、需要手动把订单改成已发货状态的场景。
 //
-// ⚠️ 文档存疑：本接口的 query 参数表只有 access_token，没有 pay_sig。但其请求体
-// 里的 env 字段注释写着「仅作为签名校验」，两处矛盾。本包暂按参数表实现（不加
-// 签名）。若实测返回 268490003，把 authAccessTokenOnly 改为 authPaySig 即可。
+// 鉴权按文档的 query 参数表实现：只有 access_token，不加 pay_sig。本页 env 只写
+// 「0-正式环境 1-沙箱环境」，没有「仅作为签名校验」那句——那是广告金那批页面上的
+// 模板文字。
+//
+// ⚠️ 本页文档自身另有矛盾：order_id 与 wx_order_id 的**必填列都标「是」**，说明列
+// 却写「(与order_id二选一)」。本包按二选一的语义实现（两者都带 omitempty）。
+//
+// 若实测返回 268490003，把 authAccessTokenOnly 改为 authPaySig 即可。
 //
 // 官方文档：POST /xpay/notify_provide_goods
 func (c *Client) NotifyProvideGoods(ctx context.Context, req NotifyProvideGoodsRequest) error {

@@ -39,10 +39,17 @@
 
 | 位置 | 矛盾所在 |
 | --- | --- |
-| 广告金 7 个 + `NotifyProvideGoods` + `PresentCurrency` | 请求体 `env` 注释写「仅作为签名校验」，但 query 里**没有 `pay_sig`** |
+| 广告金 7 个 | 请求体 `env` 注释写「仅作为签名校验」，但 query 里**没有 `pay_sig`**（该句是跨页模板文字——明确需要 `pay_sig` 的 `QueryBizBalance` 页上也有它） |
 | `RefundOrder` / `GetComplaintList` | 「注意事项」写「使用用户态签名与支付签名」，参数表只有 `pay_sig` |
 | `CurrencyPay` | 必填列**全部标「否」**（`openid`/`amount` 不可能非必填） |
 | `QueryPunishmentReasons` | 写「请求体：无」，却又要 `pay_sig` |
+| `NotifyProvideGoods` | `order_id` 与 `wx_order_id` 的必填列**都标「是」**，说明列却写「二选一」 |
+| `QueryUserBalance` 的 `first_save_flag` | 类型列写 `boolean`，说明列写「0:不满足 1:满足」，示例写 `false`——三处不一致 |
+| `QueryPunishmentReasons` 的 `relate_limitations` | 返回参数表写 `string`，同页返回示例却是数组 `[{…}]` |
+
+最后两行是**类型层面的矛盾**，性质比前几行重：本包按参数表的类型列实现，若微信
+实际返回的是另一种表示，**整个响应会反序列化失败**（不是丢一个字段）。上生产前
+建议先抓一次真实响应确认这两处。
 
 **上生产前请务必用真实凭证完整跑一遍。**
 
@@ -79,8 +86,13 @@ client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
 Redis 之类的集中式缓存。（旧的 `/cgi-bin/token` 才有「A 实例刷新会让 B 实例手上的
 `access_token` 失效」这个问题，所以文档里常见的「务必集中缓存」是针对旧接口的。）
 
-`NewClient` 会校验配置并在缺项时报错。**本包只支持现网环境**——请求体里的 `env`
-固定为 `0`，不需要也不应手动设置。
+`NewClient` 会校验配置并在缺项时报错。
+
+**本包只支持现网环境**——请求体里的 `env` 固定为 `0`，不需要也不应手动设置。
+也就是说，**本包做不了沙箱联调**。官方是按 `env` 分两套凭据的：`env=0` 配现网
+`AppKey`、`env=1` 配沙箱 `AppKey`（MP 后台「虚拟支付 → 基本配置」里各有一个），
+本包只接受现网那一个。另外 Apple 支付本身**不支持沙箱、只能用现网**，iOS 这条路
+本来也没有沙箱可联调。
 
 `HTTPClient` 可选。需要拦截请求、自定义日志或走代理时，注入一个带自定义
 `http.RoundTripper` 的 client 即可——这是 Go 的惯用做法，本包不为此另设开关。
@@ -171,7 +183,7 @@ params, err := client.BuildVirtualPayment(wechat_virtualpay_go.VirtualPaymentReq
 | 绑定广告金充值账户 | `BindTransferAccount` | 无响应体 |
 | 查询广告金充值记录 | `QueryFundsBill` | |
 | 查询广告金回收记录 | `QueryRecoverBill` | |
-| 下载广告金对应商户订单信息 | `DownloadAdverFundsOrder` | |
+| 下载广告金对应商户订单信息 | `DownloadAdverFundsOrder` | **轮询式**（首次只触发生成）；仅支持通用赠送广告金 |
 
 ### 微信支付投诉、管控处理
 
@@ -184,7 +196,7 @@ params, err := client.BuildVirtualPayment(wechat_virtualpay_go.VirtualPaymentReq
 | 完成投诉处理 | `CompleteComplaint` | 无响应体 |
 | 上传媒体文件 | `UploadVPFile` | 返回 `file_id` |
 | 获取微信支付投诉图片的签名头部 | `GetUploadFileSign` | |
-| 商户被管控原因查询 | `QueryPunishmentReasons` | **无请求参数**，签名按空 body 计算 |
+| 商户被管控原因查询 | `QueryPunishmentReasons` | **无请求参数**，但签名仍按字面量 `{}` 计算（不是空 body） |
 
 ### 调用示例
 
@@ -233,6 +245,9 @@ bal, err := client.QueryUserBalance(ctx, sessionKey, wechat_virtualpay_go.QueryU
 
 > ⚠️ **本包只支持 JSON 报文。** MP 后台「消息推送配置」里的数据格式请选 **JSON**，
 > 选 XML 的话推送会解析失败。应答同样只回 JSON。
+>
+> 官方要求**应答格式与推送格式一致**（XML 推送回 XML、JSON 推送回 JSON）。只支持
+> JSON 时这条自然满足；但若后台被改成 XML，微信会认为应答格式不对并重推（最多 15 次）。
 
 ### 事件对照
 
@@ -355,7 +370,8 @@ if wechat_virtualpay_go.IsCode(err, wechat_virtualpay_go.ErrCodeSessionKeyExpire
 
 Go 的 `json.Marshal` 默认会把 `<` `>` `&` 转义成 `<` / `>` / `&`。一旦参数
 （道具名、`attach` 透传数据等）含有这些字符，转义后的字符串就与微信预期的原文
-不一致，签名随即失败——而微信只会回 `-15006`「支付签名错误」，极难排查。
+不一致，签名随即失败——而微信只会回一个笼统的「签名错误」，极难排查：服务端接口
+报 `268490003`，小程序端拉起支付报 `-15006`。
 
 本包内部一律通过 `marshalNoHTMLEscape` 序列化来堵死这个问题，绝不直接使用
 `json.Marshal`。

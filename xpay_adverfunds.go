@@ -6,8 +6,15 @@ import (
 
 // 广告金这一批（7 个接口）的官方文档质量明显低于支付主链路：请求体里的 env 字段
 // 注释统一写着「仅作为签名校验（查询的结果都是正式环境的）」，但它们的 query 参数
-// 表里**并没有 pay_sig**——两处互相矛盾。本包按参数表实现（authAccessTokenOnly，不签名）。
-// 若实测返回 268490003，把对应调用的 authAccessTokenOnly 改为 authPaySig 即可。
+// 表里**并没有 pay_sig**——两处互相矛盾。
+//
+// 取舍偏向「不签名」，理由是那句注释不足采信：「仅作为签名校验」是**跨页复制的
+// 模板文字**，明确需要 pay_sig 的 query_biz_balance 页上同样有这句。而「不签名」
+// 一侧有三处独立证据——query 参数表、HTTPS 示例 URL（`?access_token=ACCESS_TOKEN`）、
+// 注意事项，都不含 pay_sig。
+//
+// 故本包按参数表实现（authAccessTokenOnly，不签名）。若实测返回 268490003，
+// 把对应调用的 authAccessTokenOnly 改为 authPaySig 即可。
 
 // TransferAccountState 是广告金充值账户的审核状态。
 type TransferAccountState int
@@ -328,6 +335,11 @@ type DownloadAdverFundsOrderResponse struct {
 }
 
 // DownloadAdverFundsOrder 下载广告金对应的商户订单信息。
+//
+// ⚠️ 文档的「注意事项」有两条，本方法不会替你处理：
+//   - **仅支持通用赠送广告金**（fund_type=0）对应订单的下载；
+//   - **第一次调用只触发生成下载 url**，返回的 url 可能尚未生成，需间隔轮询再次
+//     调用才能拿到最终链接。
 //
 // 官方文档：POST /xpay/download_adverfunds_order
 func (c *Client) DownloadAdverFundsOrder(ctx context.Context, req DownloadAdverFundsOrderRequest) (*DownloadAdverFundsOrderResponse, error) {

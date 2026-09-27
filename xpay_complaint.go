@@ -369,6 +369,10 @@ type RecoverySpecification struct {
 	// LimitationReasonDescribe 该条管控原因的进一步说明。
 	LimitationReasonDescribe string `json:"limitation_reason_describe"`
 	// RelateLimitations 在该条管控原因下具体受影响的能力列表。
+	//
+	// ⚠️ 文档把本字段的**类型**写成 string，但同一页的**返回示例**给的是数组
+	// （"relate_limitations": [ { … } ]）。此处按参数表的类型列用 string；若实测
+	// 返回数组，整个响应会解析失败，届时需要改成接受两种表示的自定义反序列化。
 	RelateLimitations string `json:"relate_limitations"`
 	// OtherRelateLimitations 未被标准枚举覆盖的受影响能力的补充说明。
 	OtherRelateLimitations string `json:"other_relate_limitations"`

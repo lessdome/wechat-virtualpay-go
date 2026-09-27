@@ -37,8 +37,12 @@ const (
 
 // notifyContentType 是推送应答的 Content-Type。
 //
-// 虚拟支付推送只走 JSON：MP 后台「消息推送配置」里的数据格式选 JSON 即可。
-// XML 报文本包不解析，也不生成 XML 应答。
+// 本包**只支持 JSON**：MP 后台「消息推送配置」里的数据格式要选 JSON，XML 报文本包
+// 不解析。这是本包的取舍，不等于平台只发 JSON——官方对 XML 模式同样有定义。
+//
+// 附带一条容易踩的规则：官方要求**应答格式与推送格式一致**（XML 推送回 XML、JSON
+// 推送回 JSON）。只支持 JSON 时这条自然满足；一旦后台被改成 XML，微信会认为应答
+// 格式不对而重推（最多 15 次）。
 const notifyContentType = "application/json; charset=utf-8"
 
 // NotifyConfig 是推送接收端的配置。

@@ -26,6 +26,10 @@ const payMethodRequestVirtualPayment = "requestVirtualPayment"
 // iOS 走 Apple IAP，费率约 12%、结算 45–60 天、开发者无法主动退款；
 // Android 走微信支付，费率约 1%、T+3、可主动退款。
 //
+// iOS 另有两条下单门槛（官方「iOS 端用户下单条件」）：iOS 15+ 且微信 8.0.68+，
+// 以及**最低支付金额 1 元**。设备路由由客户端完成，服务端判定不了渠道，所以本包
+// 不强制这道下限——低于 1 元的单在 iOS 会失败，在 Android 正常。
+//
 // 同样地，mode（道具直购/代币充值）也不是 signData 的一部分，而是
 // wx.requestVirtualPayment 的**顶层参数**，随 PayMode 单独交给前端。
 

@@ -35,10 +35,17 @@ type responseHeader struct {
 //	authPaySig       access_token + pay_sig     —— 21 个
 //	authUserAndPaySig access_token + signature + pay_sig —— 3 个用户态接口
 //
-// ⚠️ 存疑：authAccessTokenOnly 那批（广告金 7 个 + notify_provide_goods +
-// present_currency）的文档自相矛盾——请求体里的 env 字段注释写着「仅作为签名
-// 校验」，但 query 参数表里并没有 pay_sig。本包暂按文档字面实现（不加签名），
-// 待在现网实测确认。若实测返回 268490003（签名错误），把这些接口改回 authPaySig 即可。
+// ⚠️ 存疑：authAccessTokenOnly 那批里，两类接口的依据**并不相同**，别混为一谈：
+//
+//   - 广告金 7 个：query 参数表只有 access_token（无 pay_sig），HTTPS 示例也是
+//     `?access_token=ACCESS_TOKEN`。请求体 env 注释里另有「仅作为签名校验」一句，
+//     看着像要签名——但那是**跨页复制的模板文字**：明确需要 pay_sig 的
+//     query_biz_balance 页上同样有这句，可见它不承载语义。故按参数表不签名。
+//   - notify_provide_goods、present_currency：文档前后一致（query 表无 pay_sig，
+//     注意事项也没提签名），不存在矛盾，照参数表实现即可。
+//
+// 本包暂按文档字面实现（不加签名），待在现网实测确认。若实测返回 268490003
+// （签名错误），把这些接口改回 authPaySig 即可。
 type authMode int
 
 const (
