@@ -62,12 +62,10 @@ go get github.com/lessdome/wechat_virtualpay_go
 
 ```go
 client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
-    AppID:      "wx...",
-    OfferID:    "1234567890",                        // 虚拟支付商户号
-    AppKey:     os.Getenv("VIRTUALPAY_APP_KEY"),     // 现网密钥
-    SandboxKey: os.Getenv("VIRTUALPAY_SANDBOX_KEY"), // 沙箱密钥
-    Env:        wechat_virtualpay_go.EnvProduction,
-    AppSecret:  os.Getenv("VIRTUALPAY_APP_SECRET"),
+    AppID:     "wx...",
+    OfferID:   "1234567890",                       // 虚拟支付商户号
+    AppKey:    os.Getenv("VIRTUALPAY_APP_KEY"),    // 支付密钥
+    AppSecret: os.Getenv("VIRTUALPAY_APP_SECRET"), // 小程序密钥，用于换取 access_token
 })
 ```
 
@@ -81,8 +79,8 @@ client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
 Redis 之类的集中式缓存。（旧的 `/cgi-bin/token` 才有「A 实例刷新会让 B 实例手上的
 `access_token` 失效」这个问题，所以文档里常见的「务必集中缓存」是针对旧接口的。）
 
-`NewClient` 会校验配置并在缺项时报错。`Env` 同时决定**用哪个密钥**和**请求体里的
-`env` 字段**（现网 `0` / 沙箱 `1`）——收敛到一处，避免「现网用了沙箱 Key」这类事故。
+`NewClient` 会校验配置并在缺项时报错。**本包只支持现网环境**——请求体里的 `env`
+固定为 `0`，不需要也不应手动设置。
 
 `HTTPClient` 可选。需要拦截请求、自定义日志或走代理时，注入一个带自定义
 `http.RoundTripper` 的 client 即可——这是 Go 的惯用做法，本包不为此另设开关。
@@ -321,7 +319,7 @@ if wechat_virtualpay_go.IsCode(err, wechat_virtualpay_go.ErrCodeSessionKeyExpire
 | `-15005` | 用户签名 `signature` 错误 | `session_key` 是否最新 |
 | `-15006` | 支付签名 `pay_sig` 错误 | AppKey 与环境是否匹配、`signData` 是否字节级一致 |
 | `-15007` | `session_key` 过期 | 重新 `wx.login` + `code2Session` |
-| `-15011` | 现网版本 `env` 必须为 0 | 检查 `Config.Env` |
+| `-15011` | 现网版本 `env` 必须为 0 | 本包已固定为 0，若出现说明请求被改动过 |
 | `-15013` | `goodsPrice` 与后台不一致 | 道具价格是否已发布 |
 | `-15016` | `signData` 格式有问题 | 是否混入了非协议字段 |
 

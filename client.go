@@ -12,12 +12,8 @@ type Config struct {
 	AppID string
 	// OfferID 虚拟支付商户号（在「虚拟支付 → 基本配置」获取）。
 	OfferID string
-	// AppKey 现网支付密钥。Env=EnvProduction 时必填。
+	// AppKey 支付密钥，必填。
 	AppKey string
-	// SandboxKey 沙箱支付密钥。Env=EnvSandbox 时必填。
-	SandboxKey string
-	// Env 环境，决定使用哪个密钥以及请求体里的 env 字段。
-	Env Env
 	// AppSecret 小程序密钥。本包据此自动获取并缓存 access_token，必填。
 	//
 	// 内部走稳定版接口 POST /cgi-bin/stable_token 的普通模式：该模式下有效期内
@@ -50,17 +46,8 @@ func NewClient(cfg Config) (*Client, error) {
 	if cfg.OfferID == "" {
 		return nil, errors.New("wechat_virtualpay_go: OfferID 不能为空")
 	}
-	switch cfg.Env {
-	case EnvProduction:
-		if cfg.AppKey == "" {
-			return nil, errors.New("wechat_virtualpay_go: 现网环境（EnvProduction）需要 AppKey")
-		}
-	case EnvSandbox:
-		if cfg.SandboxKey == "" {
-			return nil, errors.New("wechat_virtualpay_go: 沙箱环境（EnvSandbox）需要 SandboxKey")
-		}
-	default:
-		return nil, errors.New("wechat_virtualpay_go: Env 非法，只能是 EnvProduction 或 EnvSandbox")
+	if cfg.AppKey == "" {
+		return nil, errors.New("wechat_virtualpay_go: AppKey 不能为空")
 	}
 	if cfg.AppSecret == "" {
 		return nil, errors.New("wechat_virtualpay_go: AppSecret 不能为空")
@@ -76,22 +63,4 @@ func NewClient(cfg Config) (*Client, error) {
 		http:        hc,
 		accessToken: &accessTokenSource{appID: cfg.AppID, secret: cfg.AppSecret, http: hc},
 	}, nil
-}
-
-// appKey 返回当前环境应使用的支付密钥。
-//
-// 收敛到一处，避免"现网用了沙箱 Key"这类高频事故。
-func (c *Client) appKey() string {
-	if c.cfg.Env == EnvSandbox {
-		return c.cfg.SandboxKey
-	}
-	return c.cfg.AppKey
-}
-
-// envInt 返回请求体里的 env 字段值。
-func (c *Client) envInt() int {
-	if c.cfg.Env == EnvSandbox {
-		return 1
-	}
-	return 0
 }

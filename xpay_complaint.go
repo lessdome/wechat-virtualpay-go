@@ -125,8 +125,7 @@ type GetComplaintListRequest struct {
 	Offset int `json:"offset"`
 	// Limit 最多返回条数。
 	Limit int `json:"limit"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // GetComplaintListResponse 是获取投诉列表的响应。
@@ -141,7 +140,6 @@ type GetComplaintListResponse struct {
 //
 // 官方文档：POST /xpay/get_complaint_list
 func (c *Client) GetComplaintList(ctx context.Context, req GetComplaintListRequest) (*GetComplaintListResponse, error) {
-	req.Env = c.envInt()
 	var resp GetComplaintListResponse
 	if err := c.call(ctx, "/xpay/get_complaint_list", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -153,8 +151,7 @@ func (c *Client) GetComplaintList(ctx context.Context, req GetComplaintListReque
 type GetComplaintDetailRequest struct {
 	// ComplaintID 投诉 ID，由 GetComplaintList 返回。
 	ComplaintID string `json:"complaint_id"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // GetComplaintDetailResponse 是获取投诉详情的响应。
@@ -167,7 +164,6 @@ type GetComplaintDetailResponse struct {
 //
 // 官方文档：POST /xpay/get_complaint_detail
 func (c *Client) GetComplaintDetail(ctx context.Context, req GetComplaintDetailRequest) (*GetComplaintDetailResponse, error) {
-	req.Env = c.envInt()
 	var resp GetComplaintDetailResponse
 	if err := c.call(ctx, "/xpay/get_complaint_detail", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -225,8 +221,7 @@ type GetNegotiationHistoryRequest struct {
 	Offset int `json:"offset"`
 	// Limit 最多返回条数。
 	Limit int `json:"limit"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // GetNegotiationHistoryResponse 是获取协商历史的响应。
@@ -241,7 +236,6 @@ type GetNegotiationHistoryResponse struct {
 //
 // 官方文档：POST /xpay/get_negotiation_history
 func (c *Client) GetNegotiationHistory(ctx context.Context, req GetNegotiationHistoryRequest) (*GetNegotiationHistoryResponse, error) {
-	req.Env = c.envInt()
 	var resp GetNegotiationHistoryResponse
 	if err := c.call(ctx, "/xpay/get_negotiation_history", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -257,8 +251,7 @@ type ResponseComplaintRequest struct {
 	ResponseContent string `json:"response_content"`
 	// ResponseImages 回复的图片，每一项是 UploadVPFile 返回的 file_id。
 	ResponseImages []string `json:"response_images"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // ResponseComplaint 回复用户投诉。
@@ -267,7 +260,6 @@ type ResponseComplaintRequest struct {
 //
 // 官方文档：POST /xpay/response_complaint
 func (c *Client) ResponseComplaint(ctx context.Context, req ResponseComplaintRequest) error {
-	req.Env = c.envInt()
 	return c.call(ctx, "/xpay/response_complaint", req, authPaySig, "", nil)
 }
 
@@ -275,15 +267,13 @@ func (c *Client) ResponseComplaint(ctx context.Context, req ResponseComplaintReq
 type CompleteComplaintRequest struct {
 	// ComplaintID 投诉 ID。
 	ComplaintID string `json:"complaint_id"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // CompleteComplaint 完成投诉处理（即「申请结单」）。
 //
 // 官方文档：POST /xpay/complete_complaint
 func (c *Client) CompleteComplaint(ctx context.Context, req CompleteComplaintRequest) error {
-	req.Env = c.envInt()
 	return c.call(ctx, "/xpay/complete_complaint", req, authPaySig, "", nil)
 }
 
@@ -297,8 +287,7 @@ type UploadVPFileRequest struct {
 	ImgURL string `json:"img_url,omitempty"`
 	// FileName 图片名称。
 	FileName string `json:"file_name"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // UploadVPFileResponse 是上传媒体文件的响应。
@@ -311,7 +300,6 @@ type UploadVPFileResponse struct {
 //
 // 官方文档：POST /xpay/upload_vp_file
 func (c *Client) UploadVPFile(ctx context.Context, req UploadVPFileRequest) (*UploadVPFileResponse, error) {
-	req.Env = c.envInt()
 	var resp UploadVPFileResponse
 	if err := c.call(ctx, "/xpay/upload_vp_file", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -328,8 +316,7 @@ type GetUploadFileSignRequest struct {
 	ConvertCOS bool `json:"convert_cos"`
 	// ComplaintID 对应的投诉 ID。
 	ComplaintID string `json:"complaint_id"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // GetUploadFileSignResponse 是获取签名头部的响应。
@@ -351,7 +338,6 @@ type GetUploadFileSignResponse struct {
 //
 // 官方文档：POST /xpay/get_upload_file_sign
 func (c *Client) GetUploadFileSign(ctx context.Context, req GetUploadFileSignRequest) (*GetUploadFileSignResponse, error) {
-	req.Env = c.envInt()
 	var resp GetUploadFileSignResponse
 	if err := c.call(ctx, "/xpay/get_upload_file_sign", req, authPaySig, "", &resp); err != nil {
 		return nil, err

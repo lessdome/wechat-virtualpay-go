@@ -22,8 +22,7 @@ type UploadGoodsItem struct {
 type StartUploadGoodsRequest struct {
 	// UploadItem 上传的道具列表。一次仅支持上传一个道具，多个道具需分多次请求。
 	UploadItem []UploadGoodsItem `json:"upload_item"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // StartUploadGoods 启动批量上传道具任务。
@@ -33,7 +32,6 @@ type StartUploadGoodsRequest struct {
 //
 // 官方文档：POST /xpay/start_upload_goods
 func (c *Client) StartUploadGoods(ctx context.Context, req StartUploadGoodsRequest) error {
-	req.Env = c.envInt()
 	return c.call(ctx, "/xpay/start_upload_goods", req, authPaySig, "", nil)
 }
 
@@ -83,8 +81,7 @@ type UploadedGoodsItem struct {
 
 // QueryUploadGoodsRequest 是查询批量上传道具任务的请求。
 type QueryUploadGoodsRequest struct {
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // QueryUploadGoodsResponse 是查询批量上传道具任务的响应。
@@ -99,7 +96,6 @@ type QueryUploadGoodsResponse struct {
 //
 // 官方文档：POST /xpay/query_upload_goods
 func (c *Client) QueryUploadGoods(ctx context.Context, req QueryUploadGoodsRequest) (*QueryUploadGoodsResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryUploadGoodsResponse
 	if err := c.call(ctx, "/xpay/query_upload_goods", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -117,8 +113,7 @@ type PublishGoodsItem struct {
 type StartPublishGoodsRequest struct {
 	// PublishItem 发布的道具列表。一次仅支持发布一个道具，多个道具需分多次请求。
 	PublishItem []PublishGoodsItem `json:"publish_item"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // StartPublishGoods 启动批量发布道具任务（把开发环境的道具发布到现网）。
@@ -129,7 +124,6 @@ type StartPublishGoodsRequest struct {
 //
 // 官方文档：POST /xpay/start_publish_goods
 func (c *Client) StartPublishGoods(ctx context.Context, req StartPublishGoodsRequest) error {
-	req.Env = c.envInt()
 	return c.call(ctx, "/xpay/start_publish_goods", req, authPaySig, "", nil)
 }
 
@@ -145,8 +139,7 @@ type PublishedGoodsItem struct {
 
 // QueryPublishGoodsRequest 是查询批量发布道具任务的请求。
 type QueryPublishGoodsRequest struct {
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // QueryPublishGoodsResponse 是查询批量发布道具任务的响应。
@@ -161,7 +154,6 @@ type QueryPublishGoodsResponse struct {
 //
 // 官方文档：POST /xpay/query_publish_goods
 func (c *Client) QueryPublishGoods(ctx context.Context, req QueryPublishGoodsRequest) (*QueryPublishGoodsResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryPublishGoodsResponse
 	if err := c.call(ctx, "/xpay/query_publish_goods", req, authPaySig, "", &resp); err != nil {
 		return nil, err

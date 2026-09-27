@@ -28,7 +28,7 @@ func hmacSHA256Hex(key, message string) string {
 // CalcPaySig 计算支付签名 pay_sig。
 //
 // 参数：
-//   - appKey:   虚拟支付支付密钥（Env=Production 用现网 Key，Env=Sandbox 用沙箱 Key）
+//   - appKey:   虚拟支付支付密钥
 //   - method:   接口方法名。拉起支付时固定为 "requestVirtualPayment"；
 //     其他接口用其路径（如 "/xpay/start_upload_goods"）。
 //     注意：method 不能带查询参数（"?" 及其后内容要舍去）。

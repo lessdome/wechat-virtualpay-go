@@ -117,7 +117,7 @@ func (c *Client) BuildVirtualPayment(req VirtualPaymentRequest) (*VirtualPayment
 	body := virtualPaymentBody{
 		OfferID:              c.cfg.OfferID,
 		BuyQuantity:          qty,
-		Env:                  c.envInt(),
+		Env:                  0, // 只支持现网环境
 		CurrencyType:         "CNY",
 		ProductID:            req.ProductID,
 		GoodsPrice:           req.GoodsPrice,
@@ -136,7 +136,7 @@ func (c *Client) BuildVirtualPayment(req VirtualPaymentRequest) (*VirtualPayment
 
 	return &VirtualPaymentParams{
 		SignData:  signData,
-		PaySig:    CalcPaySig(c.appKey(), payMethodRequestVirtualPayment, signData),
+		PaySig:    CalcPaySig(c.cfg.AppKey, payMethodRequestVirtualPayment, signData),
 		Signature: CalcSignature(req.SessionKey, signData),
 		Mode:      mode,
 	}, nil

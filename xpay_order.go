@@ -43,8 +43,8 @@ const (
 
 // OrderEnvType 是订单响应里的环境类型（order.env_type）。
 //
-// ⚠️ 取值与请求体的 env **不同**：这里是 1=现网 / 2=沙箱，而请求体的 env 是
-// 0=现网 / 1=沙箱。直接用 order.EnvType 与 Config.Env 比较会永远不相等。
+// ⚠️ 取值与请求体的 env **不同**：这里是 1=现网 / 2=沙箱，而请求体的 env 本包固定
+// 为 0（现网）。两者值域不一样，不要拿来互相比较。
 // 之所以单独给一个具名类型，就是为了让这两套编码在类型层面就分得开。
 type OrderEnvType int
 
@@ -90,8 +90,7 @@ type QueryOrderRequest struct {
 	OrderID string `json:"order_id,omitempty"`
 	// WxOrderID 微信内部单号，与 OrderID 二选一。
 	WxOrderID string `json:"wx_order_id,omitempty"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 type queryOrderResponse struct {
@@ -106,7 +105,6 @@ type queryOrderResponse struct {
 //
 // 官方文档：POST /xpay/query_order
 func (c *Client) QueryOrder(ctx context.Context, req QueryOrderRequest) (*Order, error) {
-	req.Env = c.envInt()
 	var resp queryOrderResponse
 	if err := c.call(ctx, "/xpay/query_order", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -157,8 +155,7 @@ type RefundOrderRequest struct {
 	RefundReason RefundReason `json:"refund_reason"`
 	// RefundFrom 退款来源。
 	RefundFrom RefundFrom `json:"req_from"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // RefundOrderResponse 是发起退款的响应。
@@ -184,7 +181,6 @@ type RefundOrderResponse struct {
 //
 // 官方文档：POST /xpay/refund_order
 func (c *Client) RefundOrder(ctx context.Context, req RefundOrderRequest) (*RefundOrderResponse, error) {
-	req.Env = c.envInt()
 	var resp RefundOrderResponse
 	if err := c.call(ctx, "/xpay/refund_order", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -200,8 +196,7 @@ type NotifyProvideGoodsRequest struct {
 	OrderID string `json:"order_id,omitempty"`
 	// WxOrderID 微信内部单号，与 OrderID 二选一。
 	WxOrderID string `json:"wx_order_id,omitempty"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // NotifyProvideGoods 通知微信「已发货完成」，仅用于现金单。
@@ -215,7 +210,6 @@ type NotifyProvideGoodsRequest struct {
 //
 // 官方文档：POST /xpay/notify_provide_goods
 func (c *Client) NotifyProvideGoods(ctx context.Context, req NotifyProvideGoodsRequest) error {
-	req.Env = c.envInt()
 	return c.call(ctx, "/xpay/notify_provide_goods", req, authAccessTokenOnly, "", nil)
 }
 
@@ -267,8 +261,7 @@ type StartDownloadOrderRequest struct {
 	RefundStatus RefundStatusFilter `json:"refund_status,omitempty"`
 	// PayChannel 支付渠道。
 	PayChannel PayChannel `json:"pay_channel"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // StartDownloadOrderResponse 是发起下载任务的响应。
@@ -283,7 +276,6 @@ type StartDownloadOrderResponse struct {
 //
 // 官方文档：POST /xpay/start_download_order
 func (c *Client) StartDownloadOrder(ctx context.Context, req StartDownloadOrderRequest) (*StartDownloadOrderResponse, error) {
-	req.Env = c.envInt()
 	var resp StartDownloadOrderResponse
 	if err := c.call(ctx, "/xpay/start_download_order", req, authPaySig, "", &resp); err != nil {
 		return nil, err
@@ -305,8 +297,7 @@ const (
 type QueryDownloadOrderRequest struct {
 	// TaskID 由 StartDownloadOrder 返回的下载任务 ID。
 	TaskID string `json:"task_id"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // QueryDownloadOrderResponse 是查询下载任务的响应。
@@ -325,7 +316,6 @@ type QueryDownloadOrderResponse struct {
 //
 // 官方文档：POST /xpay/query_download_order
 func (c *Client) QueryDownloadOrder(ctx context.Context, req QueryDownloadOrderRequest) (*QueryDownloadOrderResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryDownloadOrderResponse
 	if err := c.call(ctx, "/xpay/query_download_order", req, authPaySig, "", &resp); err != nil {
 		return nil, err

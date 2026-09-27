@@ -39,8 +39,7 @@ type TransferAccount struct {
 
 // QueryTransferAccountRequest 是查询广告金充值账户的请求。
 type QueryTransferAccountRequest struct {
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // QueryTransferAccountResponse 是查询广告金充值账户的响应。
@@ -52,7 +51,6 @@ type QueryTransferAccountResponse struct {
 //
 // 官方文档：POST /xpay/query_transfer_account
 func (c *Client) QueryTransferAccount(ctx context.Context, req QueryTransferAccountRequest) (*QueryTransferAccountResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryTransferAccountResponse
 	if err := c.call(ctx, "/xpay/query_transfer_account", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
@@ -87,8 +85,7 @@ type QueryAdverFundsRequest struct {
 	PageSize int `json:"page_size,omitempty"`
 	// Filter 查询过滤条件。
 	Filter *AdFundFilter `json:"filter,omitempty"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // AdverFund 是一条广告金发放记录。
@@ -112,7 +109,6 @@ type QueryAdverFundsResponse struct {
 //
 // 官方文档：POST /xpay/query_adver_funds
 func (c *Client) QueryAdverFunds(ctx context.Context, req QueryAdverFundsRequest) (*QueryAdverFundsResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryAdverFundsResponse
 	if err := c.call(ctx, "/xpay/query_adver_funds", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
@@ -143,8 +139,7 @@ type CreateFundsBillRequest struct {
 	AuthorizeAdvertise int `json:"authorize_advertise"`
 	// FundType 广告金发放原因。
 	FundType AdFundType `json:"fund_type"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // CreateFundsBillResponse 是充值广告金的响应。
@@ -159,7 +154,6 @@ type CreateFundsBillResponse struct {
 //
 // 官方文档：POST /xpay/create_funds_bill
 func (c *Client) CreateFundsBill(ctx context.Context, req CreateFundsBillRequest) (*CreateFundsBillResponse, error) {
-	req.Env = c.envInt()
 	var resp CreateFundsBillResponse
 	if err := c.call(ctx, "/xpay/create_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
@@ -173,8 +167,7 @@ type BindTransferAccountRequest struct {
 	TransferAccountUID int64 `json:"transfer_account_uid,omitempty"`
 	// TransferAccountOrgName 充值账户主体名称。
 	TransferAccountOrgName string `json:"transfer_account_org_name,omitempty"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // BindTransferAccount 绑定广告金充值账户。
@@ -182,7 +175,6 @@ type BindTransferAccountRequest struct {
 // 官方文档：POST /xpay/bind_transfer_accout
 // （路径里的 accout 是微信官方的拼写，不是笔误，改动会导致 404。）
 func (c *Client) BindTransferAccount(ctx context.Context, req BindTransferAccountRequest) error {
-	req.Env = c.envInt()
 	return c.call(ctx, "/xpay/bind_transfer_accout", req, authAccessTokenOnly, "", nil)
 }
 
@@ -215,8 +207,7 @@ type QueryFundsBillRequest struct {
 	PageSize int `json:"page_size"`
 	// Filter 查询过滤条件。
 	Filter FundsBillFilter `json:"filter"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // FundsBill 是一条广告金充值记录。
@@ -243,7 +234,6 @@ type QueryFundsBillResponse struct {
 //
 // 官方文档：POST /xpay/query_funds_bill
 func (c *Client) QueryFundsBill(ctx context.Context, req QueryFundsBillRequest) (*QueryFundsBillResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryFundsBillResponse
 	if err := c.call(ctx, "/xpay/query_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
@@ -269,8 +259,7 @@ type QueryRecoverBillRequest struct {
 	PageSize int `json:"page_size"`
 	// Filter 查询过滤条件。
 	Filter RecoverBillFilter `json:"filter"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // RecoverBill 是一条广告金回收记录。
@@ -295,7 +284,6 @@ type QueryRecoverBillResponse struct {
 //
 // 官方文档：POST /xpay/query_recover_bill
 func (c *Client) QueryRecoverBill(ctx context.Context, req QueryRecoverBillRequest) (*QueryRecoverBillResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryRecoverBillResponse
 	if err := c.call(ctx, "/xpay/query_recover_bill", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
@@ -307,8 +295,7 @@ func (c *Client) QueryRecoverBill(ctx context.Context, req QueryRecoverBillReque
 type DownloadAdverFundsOrderRequest struct {
 	// FundID 广告金发放 ID。
 	FundID string `json:"fund_id"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // DownloadAdverFundsOrderResponse 是下载广告金对应商户订单信息的响应。
@@ -321,7 +308,6 @@ type DownloadAdverFundsOrderResponse struct {
 //
 // 官方文档：POST /xpay/download_adverfunds_order
 func (c *Client) DownloadAdverFundsOrder(ctx context.Context, req DownloadAdverFundsOrderRequest) (*DownloadAdverFundsOrderResponse, error) {
-	req.Env = c.envInt()
 	var resp DownloadAdverFundsOrderResponse
 	if err := c.call(ctx, "/xpay/download_adverfunds_order", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err

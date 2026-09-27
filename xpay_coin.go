@@ -12,8 +12,7 @@ type QueryUserBalanceRequest struct {
 	OpenID string `json:"openid"`
 	// UserIP 用户 IP，形如 1.1.1.1。
 	UserIP string `json:"user_ip"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // QueryUserBalanceResponse 是查询代币余额的响应。
@@ -45,7 +44,6 @@ type QueryUserBalanceResponse struct {
 //
 // 官方文档：POST /xpay/query_user_balance
 func (c *Client) QueryUserBalance(ctx context.Context, sessionKey string, req QueryUserBalanceRequest) (*QueryUserBalanceResponse, error) {
-	req.Env = c.envInt()
 	var resp QueryUserBalanceResponse
 	if err := c.call(ctx, "/xpay/query_user_balance", req, authUserAndPaySig, sessionKey, &resp); err != nil {
 		return nil, err
@@ -98,8 +96,7 @@ type CurrencyPayRequest struct {
 	PayItem string `json:"payitem,omitempty"`
 	// Remark 备注。
 	Remark string `json:"remark,omitempty"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // CurrencyPayResponse 是扣减代币的响应。
@@ -116,7 +113,6 @@ type CurrencyPayResponse struct {
 //
 // 官方文档：POST /xpay/currency_pay
 func (c *Client) CurrencyPay(ctx context.Context, sessionKey string, req CurrencyPayRequest) (*CurrencyPayResponse, error) {
-	req.Env = c.envInt()
 	var resp CurrencyPayResponse
 	if err := c.call(ctx, "/xpay/currency_pay", req, authUserAndPaySig, sessionKey, &resp); err != nil {
 		return nil, err
@@ -139,8 +135,7 @@ type CancelCurrencyPayRequest struct {
 	OrderID string `json:"order_id"`
 	// Amount 退款金额（代币数量）。
 	Amount int64 `json:"amount"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // CancelCurrencyPayResponse 是代币支付退款的响应。
@@ -153,7 +148,6 @@ type CancelCurrencyPayResponse struct {
 //
 // 官方文档：POST /xpay/cancel_currency_pay
 func (c *Client) CancelCurrencyPay(ctx context.Context, sessionKey string, req CancelCurrencyPayRequest) (*CancelCurrencyPayResponse, error) {
-	req.Env = c.envInt()
 	var resp CancelCurrencyPayResponse
 	if err := c.call(ctx, "/xpay/cancel_currency_pay", req, authUserAndPaySig, sessionKey, &resp); err != nil {
 		return nil, err
@@ -169,8 +163,7 @@ type PresentCurrencyRequest struct {
 	OrderID string `json:"order_id"`
 	// Amount 赠送金额（代币数量）。
 	Amount int64 `json:"amount"`
-	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
-	Env int `json:"env"`
+	envField
 }
 
 // PresentCurrencyResponse 是代币赠送的响应。
@@ -195,7 +188,6 @@ type PresentCurrencyResponse struct {
 //
 // 官方文档：POST /xpay/present_currency
 func (c *Client) PresentCurrency(ctx context.Context, req PresentCurrencyRequest) (*PresentCurrencyResponse, error) {
-	req.Env = c.envInt()
 	var resp PresentCurrencyResponse
 	if err := c.call(ctx, "/xpay/present_currency", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
