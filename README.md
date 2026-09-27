@@ -62,7 +62,7 @@ if err != nil {
     log.Fatal(err)
 }
 
-params, err := client.BuildVirtualPayment(wechat_virtualpay_go.PrepayRequest{
+params, err := client.BuildVirtualPayment(wechat_virtualpay_go.VirtualPaymentRequest{
     ProductID:  "prod_001",
     GoodsPrice: 100, // 单位：分
     OutTradeNo: "ORDER20260101001",

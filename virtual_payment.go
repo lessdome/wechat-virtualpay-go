@@ -40,8 +40,8 @@ const (
 	ModeShortSeriesCoin PayMode = "short_series_coin"
 )
 
-// PrepayRequest 是构建支付参数所需的输入。
-type PrepayRequest struct {
+// VirtualPaymentRequest 是构建支付参数所需的输入。
+type VirtualPaymentRequest struct {
 	// ProductID 道具 ID。Mode=ModeShortSeriesGoods 时必填。
 	ProductID string
 	// GoodsPrice 道具单价，单位：分。Mode=ModeShortSeriesGoods 时必填。
@@ -62,8 +62,8 @@ type PrepayRequest struct {
 	ActivitySellingPrice int64
 }
 
-// PrepayParams 是交给小程序端 wx.requestVirtualPayment 的完整参数。
-type PrepayParams struct {
+// VirtualPaymentParams 是交给小程序端 wx.requestVirtualPayment 的完整参数。
+type VirtualPaymentParams struct {
 	// SignData 必须**以字符串原样**传给前端，前端不得重新序列化，
 	// 否则签名会失配（这是最常见的 -15006 来源）。
 	SignData  string
@@ -72,11 +72,11 @@ type PrepayParams struct {
 	Mode      PayMode
 }
 
-// prepayBody 是下单请求体的内部结构。
+// virtualPaymentBody 是下单请求体的内部结构。
 //
 // 字段顺序即签名串顺序，**不可随意调整**；且必须用结构体（而非 map），
 // 以保证序列化顺序稳定。
-type prepayBody struct {
+type virtualPaymentBody struct {
 	OfferID              string `json:"offerId"`
 	BuyQuantity          int    `json:"buyQuantity"`
 	Env                  int    `json:"env"`
@@ -98,8 +98,8 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 //
 // 本方法保证：算签名用的字符串与返回的 SignData 是**同一个字节序列**，
 // 从根上杜绝「签名串与下发串不一致」这一高频错误。
-func (c *Client) BuildVirtualPayment(req PrepayRequest) (*PrepayParams, error) {
-	if err := validatePrepay(req); err != nil {
+func (c *Client) BuildVirtualPayment(req VirtualPaymentRequest) (*VirtualPaymentParams, error) {
+	if err := validateVirtualPayment(req); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +112,7 @@ func (c *Client) BuildVirtualPayment(req PrepayRequest) (*PrepayParams, error) {
 		mode = ModeShortSeriesGoods
 	}
 
-	body := prepayBody{
+	body := virtualPaymentBody{
 		OfferID:              c.cfg.OfferID,
 		BuyQuantity:          qty,
 		Env:                  c.envInt(),
@@ -132,7 +132,7 @@ func (c *Client) BuildVirtualPayment(req PrepayRequest) (*PrepayParams, error) {
 	// 唯一真身：这份字符串既用于签名，也原样下发。
 	signData := string(raw)
 
-	return &PrepayParams{
+	return &VirtualPaymentParams{
 		SignData:  signData,
 		PaySig:    CalcPaySig(c.appKey(), payMethodRequestVirtualPayment, signData),
 		Signature: CalcSignature(req.SessionKey, signData),
@@ -140,7 +140,7 @@ func (c *Client) BuildVirtualPayment(req PrepayRequest) (*PrepayParams, error) {
 	}, nil
 }
 
-func validatePrepay(req PrepayRequest) error {
+func validateVirtualPayment(req VirtualPaymentRequest) error {
 	if req.SessionKey == "" {
 		return errors.New("wechat_virtualpay_go: SessionKey 不能为空（需先 code2Session 换登录态）")
 	}
