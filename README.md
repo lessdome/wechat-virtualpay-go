@@ -56,27 +56,16 @@ go get github.com/lessdome/wechat_virtualpay_go
 
 ## 快速开始
 
-### 1. 提供 AccessToken
+### 1. 准备 AccessToken
 
-`access_token` 的获取与缓存**刻意不内置**：缓存策略（内存 / 文件 / Redis）因部署形态
-而异，内置一种等于替使用者做决定。
+`Config.AccessToken` 就是一个字符串。本包**不内置获取与缓存**：缓存策略（内存 /
+文件 / Redis）因部署形态而异，内置一种等于替使用者做决定；而 `access_token` 是
+开放接口的通用凭证，多数服务本来就已经有一份现成的。
 
-传一个「返回当前 token」的函数即可。**每次调用接口时都会来取一次**，所以 token
-过期能自动刷新，不需要重建 Client：
-
-```go
-func getToken(ctx context.Context) (string, error) {
-    // 1. 先读缓存；
-    // 2. 没有或快过期则调用 /cgi-bin/token 刷新；
-    // 3. 用分布式锁避免多实例并发刷新互相顶掉。
-}
-```
-
-> ⚠️ 微信的 `access_token` **全局唯一且会互相顶掉**——多实例部署务必集中缓存，
-> 否则 A 实例刷新会让 B 实例手上的 token 立即失效。
+> ⚠️ 它**有效期约 2 小时**，且全局唯一、会互相顶掉。本包不替你刷新：
 >
-> 也正因为它的**有效期只有约 2 小时**，本包刻意不接受静态字符串：写成固定值，
-> 长驻服务会在上线两小时后突然全线报错。
+> - **长驻服务**需在过期前重建 Client（`NewClient` 很轻，不发网络请求）
+> - **多实例部署**务必集中缓存，否则 A 实例刷新会让 B 实例手上的 token 立即失效
 
 ### 2. 创建客户端
 
@@ -87,7 +76,7 @@ client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
     AppKey:      os.Getenv("VIRTUALPAY_APP_KEY"),     // 现网密钥
     SandboxKey:  os.Getenv("VIRTUALPAY_SANDBOX_KEY"), // 沙箱密钥
     Env:         wechat_virtualpay_go.EnvProduction,
-    AccessToken: getToken,
+    AccessToken: tok, // 当前可用的 access_token
 })
 ```
 
