@@ -73,7 +73,7 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 	}
 	signData := string(raw)
 
-	accessToken, err := c.accessToken(ctx)
+	accessToken, err := c.accessToken.AccessToken(ctx)
 	if err != nil {
 		return fmt.Errorf("wechat_virtualpay_go: 获取 access_token 失败: %w", err)
 	}
