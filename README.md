@@ -118,8 +118,11 @@ params, err := client.BuildVirtualPayment(wechat_virtualpay_go.VirtualPaymentReq
 
 33 个接口全部挂在 `Client` 上。命名遵循统一约定：
 
-> **方法名 = 官方接口英文名的大驼峰形式**，且每个方法所在的**文件名就是 `/xpay/`
-> 后面的那一段**。例如 `QueryOrder` 在 `query_order.go`，对应 `/xpay/query_order`。
+> **方法名 = 官方接口英文名的大驼峰形式**（`QueryOrder` 对应 `/xpay/query_order`）。
+> 接口实现按官方文档的 7 大类分文件：
+> `xpay_coin.go`（代币）、`xpay_goods.go`（道具）、`xpay_order.go`（订单）、
+> `xpay_bill.go`（账单）、`xpay_funds.go`（资金）、`xpay_adverfunds.go`（广告金）、
+> `xpay_complaint.go`（投诉）。
 
 请求类型为 `<方法名>Request`，响应类型为 `*<方法名>Response`——**例外见「备注」列**。
 请求体里的 `Env` 由 Client 自动填充，**无需也不应手动设置**。
