@@ -11,15 +11,24 @@
 //
 // 本包的目标是：**把这些坑在库内部物理性地堵死**。
 //
-// # 三个签名
+// # 两个签名
 //
-// 虚拟支付涉及三个 HMAC-SHA256 签名，本包分别实现（见 sign.go）：
+// 虚拟支付涉及两个 HMAC-SHA256 签名，本包分别实现（见 sign.go）：
 //
-//	pay_sig       = hex( HMAC-SHA256( AppKey,     method + "&" + signData ) )
-//	signature     = hex( HMAC-SHA256( sessionKey, signData ) )
-//	pay_event_sig = hex( HMAC-SHA256( AppKey,     event  + "&" + payload  ) )
+//	pay_sig   = hex( HMAC-SHA256( AppKey,     uri + "&" + signData ) )
+//	signature = hex( HMAC-SHA256( sessionKey, signData ) )
 //
-// 注意 pay_sig 会拼上 method 而 signature 不会，两者不可混用同一个函数。
+// 注意 pay_sig 会拼上 uri 而 signature 不会，两者不可混用同一个函数。
+// uri 在拉起支付时固定为 "requestVirtualPayment"；调用服务端接口时是接口路径，
+// 如 "/xpay/query_order"，且不带 query string。
+//
+// # 推送验签是另一套机制
+//
+// 消息推送的验签**不是** HMAC、也不使用 AppKey：它走微信标准「消息推送配置」通道，
+// 用开发者在 MP 后台自填的 Token 做 SHA-1 排序签名（见 notify.go 的 Notifier）。
+// 安全模式下报文还会用 EncodingAESKey 做 AES-256-CBC 加密。
+//
+// 这两套东西容易混，但它们毫无关系。
 //
 // # 字符串一致性
 //
