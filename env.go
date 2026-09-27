@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 // Env 表示虚拟支付环境。
 //

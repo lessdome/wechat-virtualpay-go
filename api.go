@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"bytes"
@@ -56,13 +56,13 @@ const (
 func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, sessionKey string, out any) error {
 	raw, err := marshalNoHTMLEscape(body)
 	if err != nil {
-		return fmt.Errorf("virtualpay: 序列化 %s 的请求体失败: %w", uri, err)
+		return fmt.Errorf("wechat_virtualpay_go: 序列化 %s 的请求体失败: %w", uri, err)
 	}
 	signData := string(raw)
 
 	token, err := c.cfg.Tokens.Token(ctx)
 	if err != nil {
-		return fmt.Errorf("virtualpay: 获取 access_token 失败: %w", err)
+		return fmt.Errorf("wechat_virtualpay_go: 获取 access_token 失败: %w", err)
 	}
 
 	q := url.Values{}
@@ -75,7 +75,7 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 	// 只有用户态接口需要用户签名 —— 注意 signature 不带 uri 前缀，与 pay_sig 不同。
 	if mode == authUserAndPaySig {
 		if sessionKey == "" {
-			return fmt.Errorf("virtualpay: %s 需要 SessionKey（用户登录态），不能为空", uri)
+			return fmt.Errorf("wechat_virtualpay_go: %s 需要 SessionKey（用户登录态），不能为空", uri)
 		}
 		q.Set("signature", CalcSignature(sessionKey, signData))
 	}
@@ -84,28 +84,28 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
-		return fmt.Errorf("virtualpay: 构造 %s 请求失败: %w", uri, err)
+		return fmt.Errorf("wechat_virtualpay_go: 构造 %s 请求失败: %w", uri, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	if c.cfg.Debug {
 		// 只打印 uri 与请求体，绝不打印 AppKey / access_token / 签名。
-		log.Printf("virtualpay: POST %s body=%s", uri, signData)
+		log.Printf("wechat_virtualpay_go: POST %s body=%s", uri, signData)
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("virtualpay: 请求 %s 失败: %w", uri, err)
+		return fmt.Errorf("wechat_virtualpay_go: 请求 %s 失败: %w", uri, err)
 	}
 	defer resp.Body.Close()
 
 	rawResp, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("virtualpay: 读取 %s 响应失败: %w", uri, err)
+		return fmt.Errorf("wechat_virtualpay_go: 读取 %s 响应失败: %w", uri, err)
 	}
 
 	if c.cfg.Debug {
-		log.Printf("virtualpay: %s 响应 status=%d body=%s", uri, resp.StatusCode, rawResp)
+		log.Printf("wechat_virtualpay_go: %s 响应 status=%d body=%s", uri, resp.StatusCode, rawResp)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -118,7 +118,7 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 
 	var hdr responseHeader
 	if err := json.Unmarshal(rawResp, &hdr); err != nil {
-		return fmt.Errorf("virtualpay: 解析 %s 响应失败: %w（原始响应: %s）", uri, err, rawResp)
+		return fmt.Errorf("wechat_virtualpay_go: 解析 %s 响应失败: %w（原始响应: %s）", uri, err, rawResp)
 	}
 	if hdr.ErrCode != 0 {
 		return &APIError{Code: hdr.ErrCode, Message: hdr.ErrMsg, Raw: rawResp}
@@ -126,7 +126,7 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 
 	if out != nil {
 		if err := json.Unmarshal(rawResp, out); err != nil {
-			return fmt.Errorf("virtualpay: 解析 %s 响应字段失败: %w（原始响应: %s）", uri, err, rawResp)
+			return fmt.Errorf("wechat_virtualpay_go: 解析 %s 响应字段失败: %w（原始响应: %s）", uri, err, rawResp)
 		}
 	}
 	return nil

@@ -1,4 +1,4 @@
-# wechat-virtualpay-go
+# wechat_virtualpay_go
 
 微信小程序「虚拟支付」**全流程**的服务端 Go SDK。**零第三方依赖**，只用标准库。
 
@@ -36,7 +36,7 @@
 ## 安装
 
 ```bash
-go get github.com/lessdome/wechat-virtualpay-go
+go get github.com/lessdome/wechat_virtualpay_go
 ```
 
 ## 快速开始
@@ -44,18 +44,18 @@ go get github.com/lessdome/wechat-virtualpay-go
 服务端**不发起支付请求**——它只负责拼参数、算签名，然后把结果交给小程序端，由 `wx.requestVirtualPayment` 拉起支付。
 
 ```go
-client, err := virtualpay.NewClient(virtualpay.Config{
+client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
     AppID:   "wx...",
     OfferID: "1234567890",
     AppKey:  os.Getenv("VIRTUALPAY_APP_KEY"),
-    Env:     virtualpay.EnvProduction,
+    Env:     wechat_virtualpay_go.EnvProduction,
     Tokens:  myTokenProvider, // 自行实现 TokenProvider
 })
 if err != nil {
     log.Fatal(err)
 }
 
-params, err := client.BuildPaymentParams(virtualpay.PrepayRequest{
+params, err := client.BuildPaymentParams(wechat_virtualpay_go.PrepayRequest{
     ProductID:  "prod_001",
     GoodsPrice: 100, // 单位：分
     OutTradeNo: "ORDER20260101001",
@@ -73,19 +73,19 @@ params, err := client.BuildPaymentParams(virtualpay.PrepayRequest{
 官方 33 个 `/xpay/*` 接口都挂在 `Client` 上，方法名与接口语义一一对应：
 
 ```go
-order, err := client.QueryOrder(ctx, virtualpay.QueryOrderRequest{
+order, err := client.QueryOrder(ctx, wechat_virtualpay_go.QueryOrderRequest{
     OpenID:  "oUser123",
     OrderID: "ORDER20260101001",
 })
 
-resp, err := client.RefundOrder(ctx, virtualpay.RefundOrderRequest{
+resp, err := client.RefundOrder(ctx, wechat_virtualpay_go.RefundOrderRequest{
     OpenID:        "oUser123",
     OrderID:       "ORDER20260101001",
     RefundOrderID: "REFUND20260101001",
     LeftFee:       order.LeftFee, // 提示：先查单拿到剩余可退金额
     RefundFee:     100,
-    RefundReason:  virtualpay.RefundReasonUserWill,
-    RefundFrom:    virtualpay.RefundFromCustomerService,
+    RefundReason:  wechat_virtualpay_go.RefundReasonUserWill,
+    RefundFrom:    wechat_virtualpay_go.RefundFromCustomerService,
 })
 ```
 
@@ -96,7 +96,7 @@ resp, err := client.RefundOrder(ctx, virtualpay.RefundOrderRequest{
 `SessionKey`：
 
 ```go
-bal, err := client.QueryUserBalance(ctx, sessionKey, virtualpay.QueryUserBalanceRequest{
+bal, err := client.QueryUserBalance(ctx, sessionKey, wechat_virtualpay_go.QueryUserBalanceRequest{
     OpenID: "oUser123",
     UserIP: "1.1.1.1",
 })
@@ -136,7 +136,7 @@ signature = hex( HMAC-SHA256( sessionKey, signData ) )
 安全模式下报文是 AES-256-CBC 加密的，需要 `EncodingAESKey`。
 
 ```go
-notifier, err := virtualpay.NewNotifier(virtualpay.NotifyConfig{
+notifier, err := wechat_virtualpay_go.NewNotifier(wechat_virtualpay_go.NotifyConfig{
     AppID:          "wx...",
     Token:          os.Getenv("VIRTUALPAY_NOTIFY_TOKEN"),
     EncodingAESKey: os.Getenv("VIRTUALPAY_AES_KEY"), // 留空则只支持明文模式
@@ -149,18 +149,18 @@ if err != nil {
 notif, err := notifier.ParseHTTP(r)
 if err != nil {
     // 验签/解密失败：回失败应答让微信重试，**绝不要发货**
-    body, ct := virtualpay.AckError(notif.Format, 1, err.Error())
+    body, ct := wechat_virtualpay_go.AckError(notif.Format, 1, err.Error())
     // ...写回 body / ct
     return
 }
 
 switch notif.Event {
-case virtualpay.EventGoodsDeliver:
+case wechat_virtualpay_go.EventGoodsDeliver:
     g := notif.GoodsDeliver
     // 用 g.WeChatPayInfo.MchOrderNo 做幂等去重，发货…
 }
 
-body, contentType := virtualpay.Ack(notif.Format) // {"ErrCode":0,"ErrMsg":"success"}
+body, contentType := wechat_virtualpay_go.Ack(notif.Format) // {"ErrCode":0,"ErrMsg":"success"}
 ```
 
 三个必须注意的点：

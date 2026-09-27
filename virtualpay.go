@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"context"
@@ -59,25 +59,25 @@ type Client struct {
 // NewClient 校验配置并构造 Client。
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.AppID == "" {
-		return nil, errors.New("virtualpay: AppID 不能为空")
+		return nil, errors.New("wechat_virtualpay_go: AppID 不能为空")
 	}
 	if cfg.OfferID == "" {
-		return nil, errors.New("virtualpay: OfferID 不能为空")
+		return nil, errors.New("wechat_virtualpay_go: OfferID 不能为空")
 	}
 	switch cfg.Env {
 	case EnvProduction:
 		if cfg.AppKey == "" {
-			return nil, errors.New("virtualpay: 现网环境（EnvProduction）需要 AppKey")
+			return nil, errors.New("wechat_virtualpay_go: 现网环境（EnvProduction）需要 AppKey")
 		}
 	case EnvSandbox:
 		if cfg.SandboxKey == "" {
-			return nil, errors.New("virtualpay: 沙箱环境（EnvSandbox）需要 SandboxKey")
+			return nil, errors.New("wechat_virtualpay_go: 沙箱环境（EnvSandbox）需要 SandboxKey")
 		}
 	default:
-		return nil, errors.New("virtualpay: Env 非法，只能是 EnvProduction 或 EnvSandbox")
+		return nil, errors.New("wechat_virtualpay_go: Env 非法，只能是 EnvProduction 或 EnvSandbox")
 	}
 	if cfg.Tokens == nil {
-		return nil, errors.New("virtualpay: 需要提供 TokenProvider")
+		return nil, errors.New("wechat_virtualpay_go: 需要提供 TokenProvider")
 	}
 
 	hc := cfg.HTTPClient

@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"bytes"
@@ -75,10 +75,10 @@ type Notifier struct {
 // NewNotifier 校验配置并构造 Notifier。
 func NewNotifier(cfg NotifyConfig) (*Notifier, error) {
 	if cfg.AppID == "" {
-		return nil, errors.New("virtualpay: NotifyConfig.AppID 不能为空")
+		return nil, errors.New("wechat_virtualpay_go: NotifyConfig.AppID 不能为空")
 	}
 	if cfg.Token == "" {
-		return nil, errors.New("virtualpay: NotifyConfig.Token 不能为空（MP 后台消息推送配置里的令牌）")
+		return nil, errors.New("wechat_virtualpay_go: NotifyConfig.Token 不能为空（MP 后台消息推送配置里的令牌）")
 	}
 	n := &Notifier{appID: cfg.AppID, token: cfg.Token}
 	if cfg.EncodingAESKey != "" {
@@ -316,7 +316,7 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 	nonce := query.Get("nonce")
 
 	if timestamp == "" || nonce == "" {
-		return nil, errors.New("virtualpay: 推送请求缺少 timestamp 或 nonce")
+		return nil, errors.New("wechat_virtualpay_go: 推送请求缺少 timestamp 或 nonce")
 	}
 
 	// 安全模式靠 encrypt_type=aes 判定，而不是靠有无 Encrypt——
@@ -326,16 +326,16 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 	plain := body
 	if encrypted {
 		if n.aesKey == nil {
-			return nil, errors.New("virtualpay: 收到安全模式推送，但 NotifyConfig 未配置 EncodingAESKey")
+			return nil, errors.New("wechat_virtualpay_go: 收到安全模式推送，但 NotifyConfig 未配置 EncodingAESKey")
 		}
 		var envelope struct {
 			Encrypt string `json:"Encrypt" xml:"Encrypt"`
 		}
 		if err := unmarshalByFormat(format, body, &envelope); err != nil {
-			return nil, fmt.Errorf("virtualpay: 解析安全模式信封失败: %w", err)
+			return nil, fmt.Errorf("wechat_virtualpay_go: 解析安全模式信封失败: %w", err)
 		}
 		if envelope.Encrypt == "" {
-			return nil, errors.New("virtualpay: 安全模式推送里没有 Encrypt 字段")
+			return nil, errors.New("wechat_virtualpay_go: 安全模式推送里没有 Encrypt 字段")
 		}
 		// ⚠️ 安全模式必须用 msg_signature 校验，官方文档明确警告不要用 signature。
 		if !verifyEncryptedSignature(n.token, timestamp, nonce, envelope.Encrypt, query.Get("msg_signature")) {
@@ -347,7 +347,7 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 		}
 		// 解密出来的明文可能是另一种格式，重新探测。
 		if format, err = detectFormat(plain); err != nil {
-			return nil, fmt.Errorf("virtualpay: 解密后的明文格式无法识别: %w", err)
+			return nil, fmt.Errorf("wechat_virtualpay_go: 解密后的明文格式无法识别: %w", err)
 		}
 	} else {
 		if !verifyPlainSignature(n.token, timestamp, nonce, query.Get("signature")) {
@@ -367,10 +367,10 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 //		// 回一个失败应答，让微信重试；不要发货
 //	}
 //	switch notif.Event {
-//	case virtualpay.EventGoodsDeliver:
+//	case wechat_virtualpay_go.EventGoodsDeliver:
 //		// 幂等发货…
 //	}
-//	body, ct := virtualpay.Ack(notif.Format)
+//	body, ct := wechat_virtualpay_go.Ack(notif.Format)
 func (n *Notifier) ParseHTTP(r *http.Request) (*Notification, error) {
 	body, err := readAllLimited(r)
 	if err != nil {
@@ -384,16 +384,16 @@ const maxNotifyBodySize = 1 << 20 // 1 MiB
 
 func readAllLimited(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
-		return nil, errors.New("virtualpay: 推送请求没有 body")
+		return nil, errors.New("wechat_virtualpay_go: 推送请求没有 body")
 	}
 	defer r.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxNotifyBodySize+1))
 	if err != nil {
-		return nil, fmt.Errorf("virtualpay: 读取推送请求体失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 读取推送请求体失败: %w", err)
 	}
 	if len(body) > maxNotifyBodySize {
-		return nil, fmt.Errorf("virtualpay: 推送请求体超过 %d 字节上限", maxNotifyBodySize)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 推送请求体超过 %d 字节上限", maxNotifyBodySize)
 	}
 	return body, nil
 }
@@ -402,7 +402,7 @@ func readAllLimited(r *http.Request) ([]byte, error) {
 func detectFormat(body []byte) (NotifyFormat, error) {
 	trimmed := bytes.TrimLeft(body, " \t\r\n")
 	if len(trimmed) == 0 {
-		return "", errors.New("virtualpay: 推送请求体为空")
+		return "", errors.New("wechat_virtualpay_go: 推送请求体为空")
 	}
 	switch trimmed[0] {
 	case '{':
@@ -410,7 +410,7 @@ func detectFormat(body []byte) (NotifyFormat, error) {
 	case '<':
 		return NotifyFormatXML, nil
 	default:
-		return "", fmt.Errorf("virtualpay: 无法识别的推送格式（首字符 %q）", trimmed[0])
+		return "", fmt.Errorf("wechat_virtualpay_go: 无法识别的推送格式（首字符 %q）", trimmed[0])
 	}
 }
 
@@ -428,7 +428,7 @@ func parseNotification(format NotifyFormat, plain []byte) (*Notification, error)
 		Event string `json:"Event" xml:"Event"`
 	}
 	if err := unmarshalByFormat(format, plain, &header); err != nil {
-		return nil, fmt.Errorf("virtualpay: 解析推送事件头失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 解析推送事件头失败: %w", err)
 	}
 
 	notif := &Notification{
@@ -467,7 +467,7 @@ func parseNotification(format NotifyFormat, plain []byte) (*Notification, error)
 	}
 
 	if err := unmarshalByFormat(format, plain, target); err != nil {
-		return nil, fmt.Errorf("virtualpay: 解析 %s 事件失败: %w", notif.Event, err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
 }
@@ -530,7 +530,7 @@ type IOSRefundQueryResponse struct {
 // 要求的信封格式返回。
 func (n *Notifier) EncryptResponse(plain []byte, format NotifyFormat) ([]byte, error) {
 	if n.aesKey == nil {
-		return nil, errors.New("virtualpay: 未配置 EncodingAESKey，无法加密应答（明文模式直接返回明文即可）")
+		return nil, errors.New("wechat_virtualpay_go: 未配置 EncodingAESKey，无法加密应答（明文模式直接返回明文即可）")
 	}
 	random16, err := randomBytes(16)
 	if err != nil {

@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type PayItem struct {
 func MarshalPayItems(items ...PayItem) (string, error) {
 	raw, err := json.Marshal(items)
 	if err != nil {
-		return "", fmt.Errorf("virtualpay: 序列化 payitem 失败: %w", err)
+		return "", fmt.Errorf("wechat_virtualpay_go: 序列化 payitem 失败: %w", err)
 	}
 	return string(raw), nil
 }

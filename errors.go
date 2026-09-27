@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("virtualpay: 微信接口错误 errcode=%d errmsg=%s", e.Code, e.Message)
+	return fmt.Sprintf("wechat_virtualpay_go: 微信接口错误 errcode=%d errmsg=%s", e.Code, e.Message)
 }
 
 // Hint 针对高频错误码给出排查提示，便于直接打日志或返回给调用方。
@@ -66,7 +66,7 @@ const (
 )
 
 // ErrInvalidSignature 表示回调验签失败。
-var ErrInvalidSignature = errors.New("virtualpay: 回调验签失败")
+var ErrInvalidSignature = errors.New("wechat_virtualpay_go: 回调验签失败")
 
 // IsCode 判断 err 是否为指定的微信错误码。
 func IsCode(err error, code int) bool {

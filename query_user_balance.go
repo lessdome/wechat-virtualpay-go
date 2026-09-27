@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func (b *BoolFlag) UnmarshalJSON(data []byte) error {
 	case "false", "0", "null":
 		*b = false
 	default:
-		return fmt.Errorf("virtualpay: 无法把 %s 解析为布尔值（期望 true/false 或 0/1）", data)
+		return fmt.Errorf("wechat_virtualpay_go: 无法把 %s 解析为布尔值（期望 true/false 或 0/1）", data)
 	}
 	return nil
 }

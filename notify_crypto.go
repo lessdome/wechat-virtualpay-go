@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"crypto/aes"
@@ -59,14 +59,14 @@ func verifyEncryptedSignature(token, timestamp, nonce, encrypt, msgSignature str
 // 规则：EncodingAESKey 是 43 个字符，尾部补一个 "=" 后做 base64 解码，得 32 字节。
 func decodeAESKey(encodingAESKey string) ([]byte, error) {
 	if len(encodingAESKey) != 43 {
-		return nil, fmt.Errorf("virtualpay: EncodingAESKey 应为 43 个字符，实际 %d 个", len(encodingAESKey))
+		return nil, fmt.Errorf("wechat_virtualpay_go: EncodingAESKey 应为 43 个字符，实际 %d 个", len(encodingAESKey))
 	}
 	key, err := base64.StdEncoding.DecodeString(encodingAESKey + "=")
 	if err != nil {
-		return nil, fmt.Errorf("virtualpay: EncodingAESKey 不是合法的 base64: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: EncodingAESKey 不是合法的 base64: %w", err)
 	}
 	if len(key) != 32 {
-		return nil, fmt.Errorf("virtualpay: AESKey 应为 32 字节，实际 %d 字节", len(key))
+		return nil, fmt.Errorf("wechat_virtualpay_go: AESKey 应为 32 字节，实际 %d 字节", len(key))
 	}
 	return key, nil
 }
@@ -91,15 +91,15 @@ const wechatPKCS7BlockSize = 32
 // maxPad 为填充块大小，微信规定为 wechatPKCS7BlockSize。
 func pkcs7Unpad(data []byte, maxPad int) ([]byte, error) {
 	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
-		return nil, errors.New("virtualpay: 密文长度不是 16 的整数倍")
+		return nil, errors.New("wechat_virtualpay_go: 密文长度不是 16 的整数倍")
 	}
 	pad := int(data[len(data)-1])
 	if pad == 0 || pad > maxPad || pad > len(data) {
-		return nil, fmt.Errorf("virtualpay: PKCS#7 填充长度 %d 非法（应在 1..%d）", pad, maxPad)
+		return nil, fmt.Errorf("wechat_virtualpay_go: PKCS#7 填充长度 %d 非法（应在 1..%d）", pad, maxPad)
 	}
 	for _, b := range data[len(data)-pad:] {
 		if int(b) != pad {
-			return nil, errors.New("virtualpay: PKCS#7 填充字节不一致")
+			return nil, errors.New("wechat_virtualpay_go: PKCS#7 填充字节不一致")
 		}
 	}
 	return data[:len(data)-pad], nil
@@ -124,7 +124,7 @@ func pkcs7Pad(data []byte, k int) []byte {
 func aesDecrypt(aesKey []byte, encryptB64, expectAppID string) ([]byte, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(encryptB64)
 	if err != nil {
-		return nil, fmt.Errorf("virtualpay: Encrypt 不是合法的 base64: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: Encrypt 不是合法的 base64: %w", err)
 	}
 	plain, err := aesCBCDecrypt(aesKey, ciphertext)
 	if err != nil {
@@ -133,18 +133,18 @@ func aesDecrypt(aesKey []byte, encryptB64, expectAppID string) ([]byte, error) {
 
 	// 16 字节随机数 + 4 字节长度
 	if len(plain) < 20 {
-		return nil, fmt.Errorf("virtualpay: 解密结果过短（%d 字节），不可能是合法报文", len(plain))
+		return nil, fmt.Errorf("wechat_virtualpay_go: 解密结果过短（%d 字节），不可能是合法报文", len(plain))
 	}
 	msgLen := int(binary.BigEndian.Uint32(plain[16:20]))
 	if msgLen < 0 || 20+msgLen > len(plain) {
-		return nil, fmt.Errorf("virtualpay: 解密结果里的消息长度 %d 越界（总长 %d）", msgLen, len(plain))
+		return nil, fmt.Errorf("wechat_virtualpay_go: 解密结果里的消息长度 %d 越界（总长 %d）", msgLen, len(plain))
 	}
 	msg := plain[20 : 20+msgLen]
 	appID := string(plain[20+msgLen:])
 
 	// 校验 appid：防止拿别人的报文来打自己的接口。
 	if appID != expectAppID {
-		return nil, fmt.Errorf("virtualpay: 解密结果里的 appid %q 与配置的 %q 不符", appID, expectAppID)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 解密结果里的 appid %q 与配置的 %q 不符", appID, expectAppID)
 	}
 	return msg, nil
 }
@@ -152,7 +152,7 @@ func aesDecrypt(aesKey []byte, encryptB64, expectAppID string) ([]byte, error) {
 // aesEncrypt 按微信的格式加密一段明文，返回 base64 后的密文。
 func aesEncrypt(aesKey, appID string, msg []byte, random16 []byte) (string, error) {
 	if len(random16) != 16 {
-		return "", fmt.Errorf("virtualpay: 随机串必须为 16 字节，实际 %d 字节", len(random16))
+		return "", fmt.Errorf("wechat_virtualpay_go: 随机串必须为 16 字节，实际 %d 字节", len(random16))
 	}
 	buf := make([]byte, 0, 16+4+len(msg)+len(appID))
 	buf = append(buf, random16...)
@@ -171,7 +171,7 @@ func aesEncrypt(aesKey, appID string, msg []byte, random16 []byte) (string, erro
 func randomBytes(n int) ([]byte, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return nil, fmt.Errorf("virtualpay: 生成随机数失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 生成随机数失败: %w", err)
 	}
 	return b, nil
 }
@@ -179,11 +179,11 @@ func randomBytes(n int) ([]byte, error) {
 // aesCBCDecrypt 用 AES-256-CBC 解密，IV 取密钥的前 16 字节。
 func aesCBCDecrypt(key, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext)%aes.BlockSize != 0 || len(ciphertext) == 0 {
-		return nil, errors.New("virtualpay: 密文长度不是 16 的整数倍")
+		return nil, errors.New("wechat_virtualpay_go: 密文长度不是 16 的整数倍")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("virtualpay: 构造 AES cipher 失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 构造 AES cipher 失败: %w", err)
 	}
 	plain := make([]byte, len(ciphertext))
 	// 微信规定 IV = AESKey 前 16 字节。
@@ -195,7 +195,7 @@ func aesCBCDecrypt(key, ciphertext []byte) ([]byte, error) {
 func aesCBCEncrypt(key, plain []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("virtualpay: 构造 AES cipher 失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 构造 AES cipher 失败: %w", err)
 	}
 	padded := pkcs7Pad(plain, wechatPKCS7BlockSize)
 	out := make([]byte, len(padded))

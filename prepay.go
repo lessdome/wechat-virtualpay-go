@@ -1,4 +1,4 @@
-package virtualpay
+package wechat_virtualpay_go
 
 import (
 	"errors"
@@ -126,7 +126,7 @@ func (c *Client) BuildPaymentParams(req PrepayRequest) (*PrepayParams, error) {
 
 	raw, err := marshalNoHTMLEscape(body)
 	if err != nil {
-		return nil, fmt.Errorf("virtualpay: 序列化支付参数失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化支付参数失败: %w", err)
 	}
 
 	// 唯一真身：这份字符串既用于签名，也原样下发。
@@ -142,16 +142,16 @@ func (c *Client) BuildPaymentParams(req PrepayRequest) (*PrepayParams, error) {
 
 func validatePrepay(req PrepayRequest) error {
 	if req.SessionKey == "" {
-		return errors.New("virtualpay: SessionKey 不能为空（需先 code2Session 换登录态）")
+		return errors.New("wechat_virtualpay_go: SessionKey 不能为空（需先 code2Session 换登录态）")
 	}
 	if req.OutTradeNo == "" {
-		return errors.New("virtualpay: OutTradeNo 不能为空")
+		return errors.New("wechat_virtualpay_go: OutTradeNo 不能为空")
 	}
 	if !outTradeNoRe.MatchString(req.OutTradeNo) {
-		return fmt.Errorf("virtualpay: OutTradeNo %q 非法，须为 8–32 位数字/字母/_-|*@", req.OutTradeNo)
+		return fmt.Errorf("wechat_virtualpay_go: OutTradeNo %q 非法，须为 8–32 位数字/字母/_-|*@", req.OutTradeNo)
 	}
 	if strings.HasPrefix(req.OutTradeNo, "_") {
-		return errors.New("virtualpay: OutTradeNo 不能以下划线开头")
+		return errors.New("wechat_virtualpay_go: OutTradeNo 不能以下划线开头")
 	}
 	mode := req.Mode
 	if mode == "" {
@@ -160,22 +160,22 @@ func validatePrepay(req PrepayRequest) error {
 	switch mode {
 	case ModeShortSeriesGoods:
 		if req.ProductID == "" {
-			return errors.New("virtualpay: 道具直购必须提供 ProductID")
+			return errors.New("wechat_virtualpay_go: 道具直购必须提供 ProductID")
 		}
 		if req.GoodsPrice <= 0 {
-			return errors.New("virtualpay: 道具直购必须提供正数 GoodsPrice（单位：分）")
+			return errors.New("wechat_virtualpay_go: 道具直购必须提供正数 GoodsPrice（单位：分）")
 		}
 	case ModeShortSeriesCoin:
 		// 代币充值不需要 productId / goodsPrice。
 	default:
-		return fmt.Errorf("virtualpay: Mode %q 非法", mode)
+		return fmt.Errorf("wechat_virtualpay_go: Mode %q 非法", mode)
 	}
 
 	if req.ActivitySellingPrice > 0 {
 		// 优惠价不得低于道具价格的 40%。用整数比较避免浮点误差：
 		// activity >= 0.4 * goods  <=>  activity*10 >= goods*4
 		if req.ActivitySellingPrice*10 < req.GoodsPrice*4 {
-			return errors.New("virtualpay: ActivitySellingPrice 不得低于 GoodsPrice 的 40%")
+			return errors.New("wechat_virtualpay_go: ActivitySellingPrice 不得低于 GoodsPrice 的 40%")
 		}
 	}
 	return nil

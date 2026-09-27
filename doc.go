@@ -1,4 +1,4 @@
-// Package virtualpay 是微信小程序「虚拟支付」的服务端 Go SDK。
+// Package wechat_virtualpay_go 是微信小程序「虚拟支付」的服务端 Go SDK。
 //
 // 它覆盖官方全部 xpay 服务端接口、全部回调事件的验签与解析，
 // 并且**零第三方依赖**（仅使用 Go 标准库）。
@@ -42,22 +42,22 @@
 // 服务端只负责「拼参数 + 算签名」，真正的支付由小程序端
 // wx.requestVirtualPayment 拉起：
 //
-//	client, err := virtualpay.NewClient(virtualpay.Config{
+//	client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
 //		AppID:   "wx...",
 //		OfferID: "1234567890",
 //		AppKey:  os.Getenv("VIRTUALPAY_APP_KEY"),
-//		Env:     virtualpay.EnvProduction,
+//		Env:     wechat_virtualpay_go.EnvProduction,
 //		Tokens:  myTokenProvider, // 见 TokenProvider
 //	})
 //	if err != nil {
 //		log.Fatal(err)
 //	}
 //
-//	params, err := client.BuildPaymentParams(virtualpay.PrepayRequest{
+//	params, err := client.BuildPaymentParams(wechat_virtualpay_go.PrepayRequest{
 //		ProductID:  "prod_001",
 //		GoodsPrice: 100, // 单位：分
 //		OutTradeNo: "ORDER20260101001",
 //		SessionKey: sessionKey, // 由 code2Session 换取
 //	})
 //	// 把 params.SignData / params.PaySig / params.Signature 交给前端
-package virtualpay
+package wechat_virtualpay_go
