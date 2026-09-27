@@ -39,34 +39,43 @@ const (
 	SettleStateWaiting SettleState = 3 // 待结算（与 0 相同）
 )
 
-// Order 是订单信息。
+// OrderEnvType 是订单响应里的环境类型（order.env_type）。
 //
-// 注意 EnvType 与请求体里的 env 取值不同：请求的 env 是 0/1，而响应里的
-// env_type 是 1=现网 / 2=沙箱。
+// ⚠️ 取值与请求体的 env **不同**：这里是 1=现网 / 2=沙箱，而请求体的 env 是
+// 0=现网 / 1=沙箱。直接用 order.EnvType 与 Config.Env 比较会永远不相等。
+// 之所以单独给一个具名类型，就是为了让这两套编码在类型层面就分得开。
+type OrderEnvType int
+
+const (
+	OrderEnvTypeProduction OrderEnvType = 1 // 现网
+	OrderEnvTypeSandbox    OrderEnvType = 2 // 沙箱
+)
+
+// Order 是订单信息。
 type Order struct {
-	OrderID        string      `json:"order_id"`         // 订单号
-	CreateTime     int64       `json:"create_time"`      // 创建时间
-	UpdateTime     int64       `json:"update_time"`      // 更新时间
-	Status         OrderStatus `json:"status"`           // 当前状态
-	BizType        int         `json:"biz_type"`         // 业务类型，0-短剧
-	OrderFee       int64       `json:"order_fee"`        // 订单金额，单位分
-	CouponFee      int64       `json:"coupon_fee"`       // 订单优惠金额，单位分（暂无此字段）
-	PaidFee        int64       `json:"paid_fee"`         // 用户支付金额，单位分
-	OrderType      OrderType   `json:"order_type"`       // 订单类型
-	RefundFee      int64       `json:"refund_fee"`       // 退款单时表示退款金额，单位分
-	PaidTime       int64       `json:"paid_time"`        // 支付/退款时间，unix 秒级时间戳
-	ProvideTime    int64       `json:"provide_time"`     // 发货时间
-	BizMeta        string      `json:"biz_meta"`         // 订单创建时传的信息
-	EnvType        int         `json:"env_type"`         // 环境类型，1-现网 2-沙箱
-	Token          string      `json:"token"`            // 下单时米大师返回的 token
-	LeftFee        int64       `json:"left_fee"`         // 支付单经过退款后剩余的金额，单位分
-	WxOrderID      string      `json:"wx_order_id"`      // 微信内部单号
-	ChannelOrderID string      `json:"channel_order_id"` // 渠道单号（用户支付详情页的商户单号）
-	WxpayOrderID   string      `json:"wxpay_order_id"`   // 微信支付交易单号
-	SettTime       int64       `json:"sett_time"`        // 结算时间戳，大于 0 表示结算成功
-	SettState      SettleState `json:"sett_state"`       // 结算状态
-	PlatformFeeFen int64       `json:"platform_fee_fen"` // 虚拟支付技术服务费，单位分；sett_state=2 时返回
-	CpsFeeFen      int64       `json:"cps_fee_fen"`      // 公众号/视频号平台 cps 服务费，单位分；sett_state=2 时返回
+	OrderID        string       `json:"order_id"`         // 订单号
+	CreateTime     int64        `json:"create_time"`      // 创建时间
+	UpdateTime     int64        `json:"update_time"`      // 更新时间
+	Status         OrderStatus  `json:"status"`           // 当前状态
+	BizType        int          `json:"biz_type"`         // 业务类型，0-短剧
+	OrderFee       int64        `json:"order_fee"`        // 订单金额，单位分
+	CouponFee      int64        `json:"coupon_fee"`       // 订单优惠金额，单位分（暂无此字段）
+	PaidFee        int64        `json:"paid_fee"`         // 用户支付金额，单位分
+	OrderType      OrderType    `json:"order_type"`       // 订单类型
+	RefundFee      int64        `json:"refund_fee"`       // 退款单时表示退款金额，单位分
+	PaidTime       int64        `json:"paid_time"`        // 支付/退款时间，unix 秒级时间戳
+	ProvideTime    int64        `json:"provide_time"`     // 发货时间
+	BizMeta        string       `json:"biz_meta"`         // 订单创建时传的信息
+	EnvType        OrderEnvType `json:"env_type"`         // 环境类型，注意取值是 1/2，见 OrderEnvType
+	Token          string       `json:"token"`            // 下单时米大师返回的 token
+	LeftFee        int64        `json:"left_fee"`         // 支付单经过退款后剩余的金额，单位分
+	WxOrderID      string       `json:"wx_order_id"`      // 微信内部单号
+	ChannelOrderID string       `json:"channel_order_id"` // 渠道单号（用户支付详情页的商户单号）
+	WxpayOrderID   string       `json:"wxpay_order_id"`   // 微信支付交易单号
+	SettTime       int64        `json:"sett_time"`        // 结算时间戳，大于 0 表示结算成功
+	SettState      SettleState  `json:"sett_state"`       // 结算状态
+	PlatformFeeFen int64        `json:"platform_fee_fen"` // 虚拟支付技术服务费，单位分；sett_state=2 时返回
+	CpsFeeFen      int64        `json:"cps_fee_fen"`      // 公众号/视频号平台 cps 服务费，单位分；sett_state=2 时返回
 }
 
 // QueryOrderRequest 是查询订单的请求。

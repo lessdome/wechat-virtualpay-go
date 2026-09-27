@@ -48,7 +48,9 @@ type VirtualPaymentRequest struct {
 	// 用于微信侧校验价格是否与后台一致。
 	GoodsPrice int64
 	// Quantity 购买数量，<=0 时按 1 处理。
-	Quantity int
+	//
+	// 用 int64 与 GoodsInfo.Quantity / CoinInfo.Quantity / PayItem.Quantity 保持一致。
+	Quantity int64
 	// OutTradeNo 业务订单号，8–32 字符，由数字/大小写字母及 _-|*@ 组成，
 	// 不能以下划线开头，且每个订单号只能使用一次。
 	OutTradeNo string
@@ -78,7 +80,7 @@ type VirtualPaymentParams struct {
 // 以保证序列化顺序稳定。
 type virtualPaymentBody struct {
 	OfferID              string `json:"offerId"`
-	BuyQuantity          int    `json:"buyQuantity"`
+	BuyQuantity          int64  `json:"buyQuantity"`
 	Env                  int    `json:"env"`
 	CurrencyType         string `json:"currencyType"`
 	ProductID            string `json:"productId,omitempty"`

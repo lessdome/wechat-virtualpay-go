@@ -2,15 +2,18 @@ package wechat_virtualpay_go
 
 import "context"
 
-// GoodsTaskStatus 是道具「上传/发布」批量任务的状态（query_upload_goods、
+// GoodsBatchStatus 是道具「上传/发布」**批量任务**的状态（query_upload_goods、
 // query_publish_goods 响应中的 status）。
-type GoodsTaskStatus int
+//
+// 与 GoodsItemStatus 区分：本类型描述的是**整批任务**，GoodsItemStatus 描述的是
+// **单个道具**。
+type GoodsBatchStatus int
 
 const (
-	GoodsTaskNone        GoodsTaskStatus = 0 // 无任务在运行
-	GoodsTaskRunning     GoodsTaskStatus = 1 // 任务运行中
-	GoodsTaskPartialFail GoodsTaskStatus = 2 // 上传/发布失败或部分失败（任务已完成）
-	GoodsTaskSuccess     GoodsTaskStatus = 3 // 上传/发布成功
+	GoodsBatchNone        GoodsBatchStatus = 0 // 无任务在运行
+	GoodsBatchRunning     GoodsBatchStatus = 1 // 任务运行中
+	GoodsBatchPartialFail GoodsBatchStatus = 2 // 上传/发布失败或部分失败（任务已完成）
+	GoodsBatchSuccess     GoodsBatchStatus = 3 // 上传/发布成功
 )
 
 // GoodsItemStatus 是单个道具的上传/发布状态。
@@ -54,7 +57,7 @@ type QueryUploadGoodsResponse struct {
 	// UploadItem 上传的道具列表。
 	UploadItem []UploadedGoodsItem `json:"upload_item"`
 	// Status 整体任务状态。
-	Status GoodsTaskStatus `json:"status"`
+	Status GoodsBatchStatus `json:"status"`
 }
 
 // QueryUploadGoods 查询批量上传道具任务的结果。

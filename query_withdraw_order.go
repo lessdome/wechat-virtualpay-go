@@ -27,8 +27,8 @@ type QueryWithdrawOrderResponse struct {
 	WithdrawNo string `json:"withdraw_no"`
 	// Status 提现状态。
 	Status WithdrawStatus `json:"status"`
-	// WithdrawAmount 提现金额，单位元。
-	WithdrawAmount string `json:"withdraw_amount"`
+	// WithdrawAmount 提现金额，**单位是元**。见 Yuan。
+	WithdrawAmount Yuan `json:"withdraw_amount"`
 	// WxWithdrawNo 提现单的微信侧单号。
 	WxWithdrawNo string `json:"wx_withdraw_no"`
 	// WithdrawSuccessTimestamp 提现成功的秒级时间戳。

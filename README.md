@@ -25,7 +25,7 @@
 | 下单参数构建 `BuildVirtualPayment` | ✅ 已实现 |
 | 服务端接口 `/xpay/*`（官方 33 个） | ✅ 已实现 |
 | 推送验签、AES 解密与事件解析（6 类事件） | ✅ 已实现 |
-| `access_token` 获取与缓存 | ➖ 刻意不内置，见 `TokenProvider` |
+| `access_token` 获取与缓存 | ➖ 刻意不内置，见 `Config.AccessToken` |
 
 ⚠️ **尚未真机联调，且仓库当前不含测试代码。**
 
@@ -56,18 +56,16 @@ go get github.com/lessdome/wechat_virtualpay_go
 
 ## 快速开始
 
-### 1. 实现 TokenProvider
+### 1. 提供 AccessToken
 
 `access_token` 的获取与缓存**刻意不内置**：缓存策略（内存 / 文件 / Redis）因部署形态
 而异，内置一种等于替使用者做决定。
 
-```go
-type RedisToken struct {
-    rdb            *redis.Client
-    appID, secret  string
-}
+传一个「返回当前 token」的函数即可。**每次调用接口时都会来取一次**，所以 token
+过期能自动刷新，不需要重建 Client：
 
-func (t *RedisToken) Token(ctx context.Context) (string, error) {
+```go
+func getToken(ctx context.Context) (string, error) {
     // 1. 先读缓存；
     // 2. 没有或快过期则调用 /cgi-bin/token 刷新；
     // 3. 用分布式锁避免多实例并发刷新互相顶掉。
@@ -76,17 +74,20 @@ func (t *RedisToken) Token(ctx context.Context) (string, error) {
 
 > ⚠️ 微信的 `access_token` **全局唯一且会互相顶掉**——多实例部署务必集中缓存，
 > 否则 A 实例刷新会让 B 实例手上的 token 立即失效。
+>
+> 也正因为它的**有效期只有约 2 小时**，本包刻意不接受静态字符串：写成固定值，
+> 长驻服务会在上线两小时后突然全线报错。
 
 ### 2. 创建客户端
 
 ```go
 client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
-    AppID:      "wx...",
-    OfferID:    "1234567890",                        // 虚拟支付商户号
-    AppKey:     os.Getenv("VIRTUALPAY_APP_KEY"),     // 现网密钥
-    SandboxKey: os.Getenv("VIRTUALPAY_SANDBOX_KEY"), // 沙箱密钥
-    Env:        wechat_virtualpay_go.EnvProduction,
-    Tokens:     myTokenProvider,
+    AppID:       "wx...",
+    OfferID:     "1234567890",                        // 虚拟支付商户号
+    AppKey:      os.Getenv("VIRTUALPAY_APP_KEY"),     // 现网密钥
+    SandboxKey:  os.Getenv("VIRTUALPAY_SANDBOX_KEY"), // 沙箱密钥
+    Env:         wechat_virtualpay_go.EnvProduction,
+    AccessToken: getToken,
 })
 ```
 
@@ -336,12 +337,17 @@ if wechat_virtualpay_go.IsCode(err, wechat_virtualpay_go.ErrCodeSessionKeyExpire
 ### 金额单位：几乎全是「分」，提现是「元」
 
 本 SDK 里**绝大多数金额单位是分**（`GoodsPrice`、`OrderFee`、`PaidFee`、`RefundFee`、
-代币 `Amount`…），**唯独提现相关的两个是「元」**：
+代币 `Amount`…）。只有提现相关的三个字段用「元」——它们都被标成了 `Yuan` 类型，
+**单位写在类型上**，扫代码时一眼能看见：
 
-- `CreateWithdrawOrderRequest.WithdrawAmount`（字符串，如 `"0.01"`）
-- `BizBalance.Amount`（字符串）
+| 字段 | 类型 |
+| --- | --- |
+| `CreateWithdrawOrderRequest.WithdrawAmount` | `Yuan` |
+| `QueryWithdrawOrderResponse.WithdrawAmount` | `Yuan` |
+| `BizBalance.Amount` | `Yuan` |
 
-按分填这两个字段会提现出 **100 倍金额**。
+`Yuan` 底层是字符串（微信如此收/发），例如 `Yuan("0.01")` 表示 1 分钱。
+把「元」按「分」的直觉去填这三个字段，会差 **100 倍**。
 
 ### 字符串一致性
 

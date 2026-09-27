@@ -121,7 +121,8 @@ type CommonNotifyFields struct {
 	FromUserName string `json:"FromUserName" xml:"FromUserName"` // 消息来源 openid，一般为微信官方
 	CreateTime   int64  `json:"CreateTime" xml:"CreateTime"`     // 消息发送时间
 	MsgType      string `json:"MsgType" xml:"MsgType"`           // 固定为 event
-	Event        string `json:"Event" xml:"Event"`               // 事件类型
+	// Event 事件类型。用 NotifyEvent 而非 string，与 Notification.Event 保持一致。
+	Event NotifyEvent `json:"Event" xml:"Event"`
 }
 
 // WeChatPayInfo 是微信支付信息，非微信支付渠道可能没有。

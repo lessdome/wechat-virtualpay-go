@@ -1,6 +1,7 @@
 package wechat_virtualpay_go
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -18,8 +19,19 @@ type Config struct {
 	SandboxKey string
 	// Env 环境，决定使用哪个密钥以及请求体里的 env 字段。
 	Env Env
-	// Tokens access_token 提供者，必填。
-	Tokens TokenProvider
+	// AccessToken 返回当前可用的 access_token。必填。
+	//
+	// 本包不内置 token 的获取与缓存，实现一个函数即可：
+	//
+	//	AccessToken: func(ctx context.Context) (string, error) {
+	//		// 1. 先读缓存；2. 快过期则调 /cgi-bin/token 刷新；3. 返回
+	//	},
+	//
+	// 每次调用接口时都会来这里取一次，所以 token 过期能自动刷新，不必重建 Client。
+	//
+	// ⚠️ 微信的 access_token 全局唯一且会互相顶掉——多实例部署务必集中缓存，
+	// 否则 A 实例刷新会让 B 实例手上的 token 立即失效。
+	AccessToken func(ctx context.Context) (string, error)
 	// HTTPClient 可选，默认使用带 10s 超时的 client。
 	//
 	// 需要拦截请求、自定义日志或转发到代理时，注入一个带自定义 Transport 的
@@ -29,7 +41,7 @@ type Config struct {
 
 // Client 是虚拟支付的客户端。
 //
-// 它是并发安全的：所有可变的调用都通过 HTTPClient 与 TokenProvider 完成，
+// 它是并发安全的：所有可变的调用都通过 HTTPClient 与 AccessToken 完成，
 // Client 自身不持有可变状态。
 type Client struct {
 	cfg  Config
@@ -56,8 +68,8 @@ func NewClient(cfg Config) (*Client, error) {
 	default:
 		return nil, errors.New("wechat_virtualpay_go: Env 非法，只能是 EnvProduction 或 EnvSandbox")
 	}
-	if cfg.Tokens == nil {
-		return nil, errors.New("wechat_virtualpay_go: 需要提供 TokenProvider")
+	if cfg.AccessToken == nil {
+		return nil, errors.New("wechat_virtualpay_go: 需要提供 AccessToken")
 	}
 
 	hc := cfg.HTTPClient

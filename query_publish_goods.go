@@ -23,7 +23,7 @@ type QueryPublishGoodsResponse struct {
 	// PublishItem 发布的道具列表。
 	PublishItem []PublishedGoodsItem `json:"publish_item"`
 	// Status 整体任务状态。
-	Status GoodsTaskStatus `json:"status"`
+	Status GoodsBatchStatus `json:"status"`
 }
 
 // QueryPublishGoods 查询批量发布道具任务的结果。

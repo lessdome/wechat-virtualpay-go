@@ -4,8 +4,8 @@ import "context"
 
 // BizBalance 是商家账户的可提现余额。
 type BizBalance struct {
-	// Amount 可提现余额，**单位是元**（字符串形式）。
-	Amount string `json:"amount"`
+	// Amount 可提现余额，**单位是元**（字符串形式）。见 Yuan。
+	Amount Yuan `json:"amount"`
 	// CurrencyCode 币种，一般为 CNY。
 	CurrencyCode string `json:"currency_code"`
 }

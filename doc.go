@@ -47,7 +47,7 @@
 //		OfferID: "1234567890",
 //		AppKey:  os.Getenv("VIRTUALPAY_APP_KEY"),
 //		Env:     wechat_virtualpay_go.EnvProduction,
-//		Tokens:  myTokenProvider, // 见 TokenProvider
+//		AccessToken: getToken, // 返回当前 access_token 的函数
 //	})
 //	if err != nil {
 //		log.Fatal(err)
