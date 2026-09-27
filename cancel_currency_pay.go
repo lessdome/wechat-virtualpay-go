@@ -10,11 +10,11 @@ type CancelCurrencyPayRequest struct {
 	UserIP string `json:"user_ip"`
 	// PayOrderID 原代币支付单号，即调用 CurrencyPay 时传的 OrderID。
 	PayOrderID string `json:"pay_order_id"`
-	// RefundOrderID 本次退款单的单号（对应协议里的 order_id 字段）。
+	// OrderID 本次退款单的单号。
 	//
 	// ⚠️ 注意与 RefundOrderRequest 的区别：那边的 OrderID 指**原支付单**，本接口的
-	// order_id 指**本次退款单**。两个接口功能相近，字段名含义相反，勿直接复制粘贴。
-	RefundOrderID string `json:"order_id"`
+	// order_id 指**本次退款单**——同名反义。两个接口功能相近，勿直接复制粘贴。
+	OrderID string `json:"order_id"`
 	// Amount 退款金额（代币数量）。
 	Amount int64 `json:"amount"`
 	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。

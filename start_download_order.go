@@ -36,11 +36,11 @@ type StartDownloadOrderRequest struct {
 	BeginDs int64 `json:"begin_ds"`
 	// EndDs 结束日期，格式 YYYYMMDD，与 BeginDs 间隔不超过 31 天。
 	EndDs int64 `json:"end_ds"`
-	// OrderTypeFilter 要下载哪一类订单（对应协议里的 order_type 字段）。
+	// OrderType 要下载哪一类订单。
 	//
 	// ⚠️ 与 Order.OrderType 同名不同义：那个是**这一单自身的类型**（0/1/7/8），
-	// 这个是**筛选条件**（1/2/3/4）。刻意改名以免误读。
-	OrderTypeFilter DownloadOrderType `json:"order_type"`
+	// 这个是**筛选条件**（1/2/3/4）。
+	OrderType DownloadOrderType `json:"order_type"`
 	// OrderInfo 搜索关键字，支持按交易单号/商户单号/用户 ID 模糊匹配，可选。
 	OrderInfo string `json:"order_info,omitempty"`
 	// IsProvided 发货状态筛选。OrderType 为道具(2)或会员订阅(3)时**必须**传入。

@@ -337,16 +337,14 @@ if wechat_virtualpay_go.IsCode(err, wechat_virtualpay_go.ErrCodeSessionKeyExpire
 ### 金额单位：几乎全是「分」，提现是「元」
 
 本 SDK 里**绝大多数金额单位是分**（`GoodsPrice`、`OrderFee`、`PaidFee`、`RefundFee`、
-代币 `Amount`…）。只有提现相关的三个字段用「元」——它们都被标成了 `Yuan` 类型，
-**单位写在类型上**，扫代码时一眼能看见：
+代币 `Amount`…）。只有提现相关的三个字段用「元」，且都是字符串：
 
-| 字段 | 类型 |
+| 字段 | 单位 |
 | --- | --- |
-| `CreateWithdrawOrderRequest.WithdrawAmount` | `Yuan` |
-| `QueryWithdrawOrderResponse.WithdrawAmount` | `Yuan` |
-| `BizBalance.Amount` | `Yuan` |
+| `CreateWithdrawOrderRequest.WithdrawAmount` | 元，如 `"0.01"` |
+| `QueryWithdrawOrderResponse.WithdrawAmount` | 元 |
+| `BizBalance.Amount` | 元 |
 
-`Yuan` 底层是字符串（微信如此收/发），例如 `Yuan("0.01")` 表示 1 分钱。
 把「元」按「分」的直觉去填这三个字段，会差 **100 倍**。
 
 ### 字符串一致性

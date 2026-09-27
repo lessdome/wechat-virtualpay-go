@@ -1,29 +1,6 @@
 package wechat_virtualpay_go
 
-import (
-	"context"
-	"fmt"
-)
-
-// BoolFlag 是兼容两种 JSON 表示的布尔值。
-//
-// 为什么需要它：query_user_balance 响应里的 first_save_flag，文档把**类型**写成
-// boolean、却在**说明**里写「0:不满足。1:满足」。两种都出现过，直接声明成 bool
-// 一旦微信回 0/1 就会整体解析失败——在一个查余额的接口上因为这个报错不值得。
-type BoolFlag bool
-
-// UnmarshalJSON 同时接受 true/false、0/1 与 null。
-func (b *BoolFlag) UnmarshalJSON(data []byte) error {
-	switch string(data) {
-	case "true", "1":
-		*b = true
-	case "false", "0", "null":
-		*b = false
-	default:
-		return fmt.Errorf("wechat_virtualpay_go: 无法把 %s 解析为布尔值（期望 true/false 或 0/1）", data)
-	}
-	return nil
-}
+import "context"
 
 // QueryUserBalanceRequest 是查询代币余额的请求。
 type QueryUserBalanceRequest struct {
@@ -50,7 +27,11 @@ type QueryUserBalanceResponse struct {
 	// SumCost 历史总消耗代币金额。
 	SumCost int64 `json:"sum_cost"`
 	// FirstSaveFlag 是否满足首充活动。
-	FirstSaveFlag BoolFlag `json:"first_save_flag"`
+	//
+	// ⚠️ 文档把本字段的**类型**写成 boolean，**说明**里却写「0:不满足。1:满足」。
+	// 此处按文档的类型列用 bool；若实测微信返回 0/1，整个响应会解析失败，届时
+	// 需要改成接受两种表示的自定义反序列化。
+	FirstSaveFlag bool `json:"first_save_flag"`
 }
 
 // QueryUserBalance 查询用户的代币余额。

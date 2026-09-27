@@ -13,7 +13,7 @@ type CreateWithdrawOrderRequest struct {
 	// 分清，这里按分填会提现出 100 倍金额。
 	//
 	// 留空表示全额提现。
-	WithdrawAmount Yuan `json:"withdraw_amount,omitempty"`
+	WithdrawAmount string `json:"withdraw_amount,omitempty"`
 	// Env 由 Client 按 Config.Env 自动填充，调用方无需设置（设置了也会被覆盖）。
 	Env int `json:"env"`
 }
