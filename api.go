@@ -23,18 +23,18 @@ type responseHeader struct {
 //
 // 官方 33 个 /xpay 接口按 query 参数分为三级，本包照文档实现：
 //
-//	authTokenOnly    仅 access_token            —— 9 个商家级接口
+//	authAccessTokenOnly    仅 access_token            —— 9 个商家级接口
 //	authPaySig       access_token + pay_sig     —— 21 个
 //	authUserAndPaySig access_token + signature + pay_sig —— 3 个用户态接口
 //
-// ⚠️ 存疑：authTokenOnly 那批（广告金 7 个 + notify_provide_goods +
+// ⚠️ 存疑：authAccessTokenOnly 那批（广告金 7 个 + notify_provide_goods +
 // present_currency）的文档自相矛盾——请求体里的 env 字段注释写着「仅作为签名
 // 校验」，但 query 参数表里并没有 pay_sig。本包暂按文档字面实现（不加签名），
 // 待在沙箱/现网实测确认。若实测返回 -15006，把这些接口改回 authPaySig 即可。
 type authMode int
 
 const (
-	authTokenOnly authMode = iota
+	authAccessTokenOnly authMode = iota
 	authPaySig
 	authUserAndPaySig
 )
@@ -59,16 +59,16 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 	}
 	signData := string(raw)
 
-	token, err := c.token(ctx)
+	accessToken, err := c.accessToken(ctx)
 	if err != nil {
 		return fmt.Errorf("wechat_virtualpay_go: 获取 access_token 失败: %w", err)
 	}
 
 	q := url.Values{}
-	q.Set("access_token", token)
+	q.Set("access_token", accessToken)
 
-	// 除 authTokenOnly 外都需要支付签名。uri 不带 query string。
-	if mode != authTokenOnly {
+	// 除 authAccessTokenOnly 外都需要支付签名。uri 不带 query string。
+	if mode != authAccessTokenOnly {
 		q.Set("pay_sig", CalcPaySig(c.appKey(), uri, signData))
 	}
 	// 只有用户态接口需要用户签名 —— 注意 signature 不带 uri 前缀，与 pay_sig 不同。

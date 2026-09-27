@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// tokenRefreshMargin 是提前刷新的余量。
+// accessTokenRefreshMargin 是提前刷新的余量。
 //
 // 微信文档：稳定版接口在普通模式下会**提前 5 分钟**更新 access_token，
 // 因此留同样的余量即可，不必等到真正过期才换。
-const tokenRefreshMargin = 5 * time.Minute
+const accessTokenRefreshMargin = 5 * time.Minute
 
-// tokenSource 用「稳定版接口调用凭据」自动获取并缓存 access_token。
+// accessTokenSource 用「稳定版接口调用凭据」自动获取并缓存 access_token。
 //
 // 用的是 POST /cgi-bin/stable_token 的**普通模式**（不带 force_refresh）。该模式有
 // 两个关键性质：
@@ -27,54 +27,54 @@ const tokenRefreshMargin = 5 * time.Minute
 //
 // 因此多个实例各持一份内存缓存是安全的——不会互相顶掉，也就不需要分布式锁或
 // 集中式缓存。这正是选择稳定版而非旧接口的原因。
-type tokenSource struct {
+type accessTokenSource struct {
 	appID  string
 	secret string
 	http   *http.Client
 
-	mu        sync.Mutex
-	token     string
-	expiresAt time.Time
+	mu          sync.Mutex
+	accessToken string
+	expiresAt   time.Time
 }
 
-// Token 返回当前可用的 access_token，必要时刷新。
-func (t *tokenSource) Token(ctx context.Context) (string, error) {
+// AccessToken 返回当前可用的 access_token，必要时刷新。
+func (t *accessTokenSource) AccessToken(ctx context.Context) (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	// 串行化并发调用：微信对 stable_token 有频率限制（1 万次/分钟），并发去刷
-	// 没有意义，只会浪费配额、且拿回来的还是同一个 token。
-	if t.token != "" && time.Now().Before(t.expiresAt) {
-		return t.token, nil
+	// 没有意义，只会浪费配额、且拿回来的还是同一个 access_token。
+	if t.accessToken != "" && time.Now().Before(t.expiresAt) {
+		return t.accessToken, nil
 	}
 
-	token, lifetime, err := t.fetch(ctx)
+	accessToken, lifetime, err := t.fetch(ctx)
 	if err != nil {
 		return "", err
 	}
 
 	// 余量不超过有效期的一半，避免 expires_in 异常偏小时反复刷新。
-	margin := tokenRefreshMargin
+	margin := accessTokenRefreshMargin
 	if margin > lifetime/2 {
 		margin = lifetime / 2
 	}
-	t.token = token
+	t.accessToken = accessToken
 	t.expiresAt = time.Now().Add(lifetime - margin)
-	return token, nil
+	return accessToken, nil
 }
 
-// stableTokenRequest 是 POST /cgi-bin/stable_token 的请求体。
+// stableAccessTokenRequest 是 POST /cgi-bin/stable_token 的请求体。
 //
 // 刻意不带 force_refresh：不传即为 false（普通模式），这正是我们要的。
-// 强制刷新会让上次的 token 立即失效，且每天限 20 次。
-type stableTokenRequest struct {
+// 强制刷新会让上次的 access_token 立即失效，且每天限 20 次。
+type stableAccessTokenRequest struct {
 	GrantType string `json:"grant_type"`
 	AppID     string `json:"appid"`
 	Secret    string `json:"secret"`
 }
 
-func (t *tokenSource) fetch(ctx context.Context) (string, time.Duration, error) {
-	body, err := marshalNoHTMLEscape(stableTokenRequest{
+func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, error) {
+	body, err := marshalNoHTMLEscape(stableAccessTokenRequest{
 		GrantType: "client_credential",
 		AppID:     t.appID,
 		Secret:    t.secret,

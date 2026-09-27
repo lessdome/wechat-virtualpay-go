@@ -4,8 +4,8 @@ import "context"
 
 // 广告金这一批（7 个接口）的官方文档质量明显低于支付主链路：请求体里的 env 字段
 // 注释统一写着「仅作为签名校验（查询的结果都是正式环境的）」，但它们的 query 参数
-// 表里**并没有 pay_sig**——两处互相矛盾。本包按参数表实现（authTokenOnly，不签名）。
-// 若实测返回 -15006，把对应调用的 authTokenOnly 改为 authPaySig 即可。
+// 表里**并没有 pay_sig**——两处互相矛盾。本包按参数表实现（authAccessTokenOnly，不签名）。
+// 若实测返回 -15006，把对应调用的 authAccessTokenOnly 改为 authPaySig 即可。
 
 // TransferAccountState 是广告金充值账户的审核状态。
 type TransferAccountState int
@@ -52,7 +52,7 @@ type QueryTransferAccountResponse struct {
 func (c *Client) QueryTransferAccount(ctx context.Context, req QueryTransferAccountRequest) (*QueryTransferAccountResponse, error) {
 	req.Env = c.envInt()
 	var resp QueryTransferAccountResponse
-	if err := c.call(ctx, "/xpay/query_transfer_account", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/query_transfer_account", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

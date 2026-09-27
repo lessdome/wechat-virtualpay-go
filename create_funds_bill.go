@@ -43,7 +43,7 @@ type CreateFundsBillResponse struct {
 func (c *Client) CreateFundsBill(ctx context.Context, req CreateFundsBillRequest) (*CreateFundsBillResponse, error) {
 	req.Env = c.envInt()
 	var resp CreateFundsBillResponse
-	if err := c.call(ctx, "/xpay/create_funds_bill", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/create_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

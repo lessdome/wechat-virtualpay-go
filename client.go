@@ -22,7 +22,7 @@ type Config struct {
 	// AppSecret 小程序密钥。填了则由本包自动获取并刷新 access_token（推荐）。
 	//
 	// 内部走稳定版接口 POST /cgi-bin/stable_token 的普通模式：该模式下有效期内
-	// **重复调用不会更新 token**，且与旧的 /cgi-bin/token **完全隔离**——因此多实例
+	// **重复调用不会更新 access_token**，且与旧的 /cgi-bin/token **完全隔离**——因此多实例
 	// 各持一份内存缓存是安全的，不需要分布式锁，也不需要集中式缓存。
 	AppSecret string
 	// AccessToken 自定义 token 来源。仅当 AppSecret 这条路走不通时才需要填，
@@ -39,14 +39,14 @@ type Config struct {
 
 // Client 是虚拟支付的客户端。
 //
-// 它是并发安全的：除配置外只持有一个自带互斥锁的 token 缓存（走 AppSecret 内置
-// 获取时），所有可变的调用都通过 HTTPClient 完成。
+// 它是并发安全的：除配置外只持有一个自带互斥锁的 access_token 缓存（走 AppSecret
+// 内置获取时），所有可变的调用都通过 HTTPClient 完成。
 type Client struct {
 	cfg  Config
 	http *http.Client
-	// token 是已解析好的 token 来源：要么是调用方给的 AccessToken，
-	// 要么是内部基于 AppSecret 构造的稳定版 tokenSource。
-	token func(ctx context.Context) (string, error)
+	// accessToken 是已解析好的 access_token 来源：要么是调用方给的
+	// Config.AccessToken，要么是内部基于 AppSecret 构造的稳定版来源。
+	accessToken func(ctx context.Context) (string, error)
 }
 
 // NewClient 校验配置并构造 Client。
@@ -78,15 +78,15 @@ func NewClient(cfg Config) (*Client, error) {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	// token 来源：显式传入的 AccessToken 优先，其次用 AppSecret 构造内置来源。
-	var token func(ctx context.Context) (string, error)
+	// access_token 来源：显式传入的 AccessToken 优先，其次用 AppSecret 构造内置来源。
+	var accessToken func(ctx context.Context) (string, error)
 	if cfg.AccessToken != nil {
-		token = cfg.AccessToken
+		accessToken = cfg.AccessToken
 	} else {
-		token = (&tokenSource{appID: cfg.AppID, secret: cfg.AppSecret, http: hc}).Token
+		accessToken = (&accessTokenSource{appID: cfg.AppID, secret: cfg.AppSecret, http: hc}).AccessToken
 	}
 
-	return &Client{cfg: cfg, http: hc, token: token}, nil
+	return &Client{cfg: cfg, http: hc, accessToken: accessToken}, nil
 }
 
 // appKey 返回当前环境应使用的支付密钥。

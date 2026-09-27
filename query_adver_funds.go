@@ -56,7 +56,7 @@ type QueryAdverFundsResponse struct {
 func (c *Client) QueryAdverFunds(ctx context.Context, req QueryAdverFundsRequest) (*QueryAdverFundsResponse, error) {
 	req.Env = c.envInt()
 	var resp QueryAdverFundsResponse
-	if err := c.call(ctx, "/xpay/query_adver_funds", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/query_adver_funds", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

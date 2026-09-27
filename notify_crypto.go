@@ -43,14 +43,14 @@ func sha1SortedHex(parts ...string) string {
 }
 
 // verifyPlainSignature 校验明文模式的 signature。
-func verifyPlainSignature(token, timestamp, nonce, signature string) bool {
-	expected := sha1SortedHex(token, timestamp, nonce)
+func verifyPlainSignature(notifyToken, timestamp, nonce, signature string) bool {
+	expected := sha1SortedHex(notifyToken, timestamp, nonce)
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) == 1
 }
 
 // verifyEncryptedSignature 校验安全模式的 msg_signature。
-func verifyEncryptedSignature(token, timestamp, nonce, encrypt, msgSignature string) bool {
-	expected := sha1SortedHex(token, timestamp, nonce, encrypt)
+func verifyEncryptedSignature(notifyToken, timestamp, nonce, encrypt, msgSignature string) bool {
+	expected := sha1SortedHex(notifyToken, timestamp, nonce, encrypt)
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(msgSignature)) == 1
 }
 

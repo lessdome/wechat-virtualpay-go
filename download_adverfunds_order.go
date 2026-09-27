@@ -22,7 +22,7 @@ type DownloadAdverFundsOrderResponse struct {
 func (c *Client) DownloadAdverFundsOrder(ctx context.Context, req DownloadAdverFundsOrderRequest) (*DownloadAdverFundsOrderResponse, error) {
 	req.Env = c.envInt()
 	var resp DownloadAdverFundsOrderResponse
-	if err := c.call(ctx, "/xpay/download_adverfunds_order", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/download_adverfunds_order", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

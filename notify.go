@@ -67,9 +67,11 @@ type NotifyConfig struct {
 
 // Notifier 负责推送的验签、解密与解析。它是并发安全的（无可变状态）。
 type Notifier struct {
-	appID  string
-	token  string
-	aesKey []byte // nil 表示只支持明文模式
+	appID string
+	// notifyToken 是 MP 后台「消息推送配置」里的令牌，用于验签。
+	// 与 access_token 是两回事，命名上刻意区分开。
+	notifyToken string
+	aesKey      []byte // nil 表示只支持明文模式
 }
 
 // NewNotifier 校验配置并构造 Notifier。
@@ -80,7 +82,7 @@ func NewNotifier(cfg NotifyConfig) (*Notifier, error) {
 	if cfg.Token == "" {
 		return nil, errors.New("wechat_virtualpay_go: NotifyConfig.Token 不能为空（MP 后台消息推送配置里的令牌）")
 	}
-	n := &Notifier{appID: cfg.AppID, token: cfg.Token}
+	n := &Notifier{appID: cfg.AppID, notifyToken: cfg.Token}
 	if cfg.EncodingAESKey != "" {
 		key, err := decodeAESKey(cfg.EncodingAESKey)
 		if err != nil {
@@ -339,7 +341,7 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 			return nil, errors.New("wechat_virtualpay_go: 安全模式推送里没有 Encrypt 字段")
 		}
 		// ⚠️ 安全模式必须用 msg_signature 校验，官方文档明确警告不要用 signature。
-		if !verifyEncryptedSignature(n.token, timestamp, nonce, envelope.Encrypt, query.Get("msg_signature")) {
+		if !verifyEncryptedSignature(n.notifyToken, timestamp, nonce, envelope.Encrypt, query.Get("msg_signature")) {
 			return nil, ErrInvalidSignature
 		}
 		plain, err = aesDecrypt(n.aesKey, envelope.Encrypt, n.appID)
@@ -351,7 +353,7 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 			return nil, fmt.Errorf("wechat_virtualpay_go: 解密后的明文格式无法识别: %w", err)
 		}
 	} else {
-		if !verifyPlainSignature(n.token, timestamp, nonce, query.Get("signature")) {
+		if !verifyPlainSignature(n.notifyToken, timestamp, nonce, query.Get("signature")) {
 			return nil, ErrInvalidSignature
 		}
 	}

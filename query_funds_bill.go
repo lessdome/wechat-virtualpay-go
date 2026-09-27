@@ -61,7 +61,7 @@ type QueryFundsBillResponse struct {
 func (c *Client) QueryFundsBill(ctx context.Context, req QueryFundsBillRequest) (*QueryFundsBillResponse, error) {
 	req.Env = c.envInt()
 	var resp QueryFundsBillResponse
-	if err := c.call(ctx, "/xpay/query_funds_bill", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/query_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

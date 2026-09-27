@@ -21,10 +21,10 @@ type NotifyProvideGoodsRequest struct {
 //
 // ⚠️ 文档存疑：本接口的 query 参数表只有 access_token，没有 pay_sig。但其请求体
 // 里的 env 字段注释写着「仅作为签名校验」，两处矛盾。本包暂按参数表实现（不加
-// 签名）。若实测返回 -15006，把 authTokenOnly 改为 authPaySig 即可。
+// 签名）。若实测返回 -15006，把 authAccessTokenOnly 改为 authPaySig 即可。
 //
 // 官方文档：POST /xpay/notify_provide_goods
 func (c *Client) NotifyProvideGoods(ctx context.Context, req NotifyProvideGoodsRequest) error {
 	req.Env = c.envInt()
-	return c.call(ctx, "/xpay/notify_provide_goods", req, authTokenOnly, "", nil)
+	return c.call(ctx, "/xpay/notify_provide_goods", req, authAccessTokenOnly, "", nil)
 }

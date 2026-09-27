@@ -48,7 +48,7 @@ type QueryRecoverBillResponse struct {
 func (c *Client) QueryRecoverBill(ctx context.Context, req QueryRecoverBillRequest) (*QueryRecoverBillResponse, error) {
 	req.Env = c.envInt()
 	var resp QueryRecoverBillResponse
-	if err := c.call(ctx, "/xpay/query_recover_bill", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/query_recover_bill", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

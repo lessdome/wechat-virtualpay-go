@@ -32,13 +32,13 @@ type PresentCurrencyResponse struct {
 //
 // ⚠️ 文档存疑：本接口的 query 参数表只有 access_token，没有 pay_sig，但其请求体
 // 里的 env 注释写着「仅作为签名校验」。本包暂按参数表实现（不加签名）。若实测
-// 返回 -15006，把下面的 authTokenOnly 改为 authPaySig 即可。
+// 返回 -15006，把下面的 authAccessTokenOnly 改为 authPaySig 即可。
 //
 // 官方文档：POST /xpay/present_currency
 func (c *Client) PresentCurrency(ctx context.Context, req PresentCurrencyRequest) (*PresentCurrencyResponse, error) {
 	req.Env = c.envInt()
 	var resp PresentCurrencyResponse
-	if err := c.call(ctx, "/xpay/present_currency", req, authTokenOnly, "", &resp); err != nil {
+	if err := c.call(ctx, "/xpay/present_currency", req, authAccessTokenOnly, "", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

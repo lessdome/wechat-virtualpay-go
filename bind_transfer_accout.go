@@ -18,5 +18,5 @@ type BindTransferAccountRequest struct {
 // （路径里的 accout 是微信官方的拼写，不是笔误，改动会导致 404。）
 func (c *Client) BindTransferAccount(ctx context.Context, req BindTransferAccountRequest) error {
 	req.Env = c.envInt()
-	return c.call(ctx, "/xpay/bind_transfer_accout", req, authTokenOnly, "", nil)
+	return c.call(ctx, "/xpay/bind_transfer_accout", req, authAccessTokenOnly, "", nil)
 }
