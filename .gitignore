@@ -1,6 +1,3 @@
-# 本地检查脚本产物（check.sh 生成）
-check-report.txt
-
 # 构建/测试产物
 *.test
 *.out
