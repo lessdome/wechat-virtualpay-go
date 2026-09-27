@@ -231,6 +231,9 @@ bal, err := client.QueryUserBalance(ctx, sessionKey, wechat_virtualpay_go.QueryU
 `Token` 是你在 MP 后台自填的令牌，**不是 AppKey**；参数在 URL query 上。
 安全模式下报文是 AES-256-CBC 加密的，需要 `EncodingAESKey`。
 
+> ⚠️ **本包只支持 JSON 报文。** MP 后台「消息推送配置」里的数据格式请选 **JSON**，
+> 选 XML 的话推送会解析失败。应答同样只回 JSON。
+
 ### 事件对照
 
 | 推送类型 | `Event` 值 | 结构体 |
@@ -260,7 +263,7 @@ if err != nil {
 notif, err := notifier.ParseHTTP(r)
 if err != nil {
     // 验签/解密失败：回失败应答让微信重试，**绝不要发货**
-    body, ct := wechat_virtualpay_go.AckError(notif.Format, 1, err.Error())
+    body, ct := wechat_virtualpay_go.AckError(1, err.Error())
     w.Header().Set("Content-Type", ct)
     w.Write(body)
     return
@@ -272,7 +275,7 @@ case wechat_virtualpay_go.EventGoodsDeliver:
     // 用 g.WeChatPayInfo.MchOrderNo 做幂等去重，发货…
 }
 
-body, contentType := wechat_virtualpay_go.Ack(notif.Format) // {"ErrCode":0,"ErrMsg":"success"}
+body, contentType := wechat_virtualpay_go.Ack() // {"ErrCode":0,"ErrMsg":"success"}
 ```
 
 ### 三条铁律

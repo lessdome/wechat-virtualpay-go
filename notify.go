@@ -3,12 +3,13 @@ package wechat_virtualpay_go
 import (
 	"bytes"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
+	"time"
 )
 
 // NotifyEvent 是虚拟支付推送的事件类型。
@@ -34,23 +35,11 @@ const (
 	EventIOSRefundQuery NotifyEvent = "xpay_subscribe_ios_refund_query_notify"
 )
 
-// NotifyFormat 是推送报文的数据格式，由 MP 后台「消息推送配置」决定。
-type NotifyFormat string
-
-const (
-	// NotifyFormatJSON 报文为 JSON 格式，形如 {"ToUserName":"...","Event":"..."}。
-	NotifyFormatJSON NotifyFormat = "json"
-	// NotifyFormatXML 报文为 XML 格式，形如 <xml><ToUserName>...</ToUserName></xml>。
-	NotifyFormatXML NotifyFormat = "xml"
-)
-
-// ContentType 返回该格式对应的 HTTP Content-Type。
-func (f NotifyFormat) ContentType() string {
-	if f == NotifyFormatXML {
-		return "application/xml; charset=utf-8"
-	}
-	return "application/json; charset=utf-8"
-}
+// notifyContentType 是推送应答的 Content-Type。
+//
+// 虚拟支付推送只走 JSON：MP 后台「消息推送配置」里的数据格式选 JSON 即可。
+// XML 报文本包不解析，也不生成 XML 应答。
+const notifyContentType = "application/json; charset=utf-8"
 
 // NotifyConfig 是推送接收端的配置。
 //
@@ -104,8 +93,6 @@ func (n *Notifier) SupportsEncrypted() bool { return n.aesKey != nil }
 type Notification struct {
 	// Event 事件类型。
 	Event NotifyEvent
-	// Format 原始报文的数据格式。
-	Format NotifyFormat
 	// Plain 解密后的明文原文（明文模式下即原始请求体）。
 	//
 	// 可直接落库备查：里面有完整的业务字段，将来排查争议时很有用。
@@ -121,60 +108,60 @@ type Notification struct {
 
 // CommonNotifyFields 是所有推送共有的字段。
 type CommonNotifyFields struct {
-	ToUserName   string `json:"ToUserName" xml:"ToUserName"`     // 小程序原始 ID
-	FromUserName string `json:"FromUserName" xml:"FromUserName"` // 消息来源 openid，一般为微信官方
-	CreateTime   int64  `json:"CreateTime" xml:"CreateTime"`     // 消息发送时间
-	MsgType      string `json:"MsgType" xml:"MsgType"`           // 固定为 event
+	ToUserName   string `json:"ToUserName"`   // 小程序原始 ID
+	FromUserName string `json:"FromUserName"` // 消息来源 openid，一般为微信官方
+	CreateTime   int64  `json:"CreateTime"`   // 消息发送时间
+	MsgType      string `json:"MsgType"`      // 固定为 event
 	// Event 事件类型。用 NotifyEvent 而非 string，与 Notification.Event 保持一致。
-	Event NotifyEvent `json:"Event" xml:"Event"`
+	Event NotifyEvent `json:"Event"`
 }
 
 // WeChatPayInfo 是微信支付信息，非微信支付渠道可能没有。
 type WeChatPayInfo struct {
 	// MchOrderNo 微信支付商户单号。**发货场景用它做幂等去重**（平台单号）。
-	MchOrderNo string `json:"MchOrderNo" xml:"MchOrderNo"`
+	MchOrderNo string `json:"MchOrderNo"`
 	// TransactionID 交易单号（微信支付订单号）。
-	TransactionID string `json:"TransactionId" xml:"TransactionId"`
+	TransactionID string `json:"TransactionId"`
 	// PaidTime 用户支付时间，Linux 秒级时间戳。
-	PaidTime int64 `json:"PaidTime" xml:"PaidTime"`
+	PaidTime int64 `json:"PaidTime"`
 }
 
 // GoodsInfo 是道具参数信息。
 type GoodsInfo struct {
 	// ProductID 道具 ID。
-	ProductID string `json:"ProductId" xml:"ProductId"`
+	ProductID string `json:"ProductId"`
 	// Quantity 数量。
-	Quantity int64 `json:"Quantity" xml:"Quantity"`
+	Quantity int64 `json:"Quantity"`
 	// OrigPrice 物品原始价格，单位分。
-	OrigPrice int64 `json:"OrigPrice" xml:"OrigPrice"`
+	OrigPrice int64 `json:"OrigPrice"`
 	// ActualPrice 物品实际支付价格，单位分。
-	ActualPrice int64 `json:"ActualPrice" xml:"ActualPrice"`
+	ActualPrice int64 `json:"ActualPrice"`
 	// Attach 透传信息，即下单时传的 attach。
-	Attach string `json:"Attach" xml:"Attach"`
+	Attach string `json:"Attach"`
 }
 
 // CoinInfo 是代币参数信息。
 type CoinInfo struct {
 	// Quantity 数量。
-	Quantity int64 `json:"Quantity" xml:"Quantity"`
+	Quantity int64 `json:"Quantity"`
 	// OrigPrice 原始价格，单位分。
-	OrigPrice int64 `json:"OrigPrice" xml:"OrigPrice"`
+	OrigPrice int64 `json:"OrigPrice"`
 	// ActualPrice 实际支付价格，单位分。
-	ActualPrice int64 `json:"ActualPrice" xml:"ActualPrice"`
+	ActualPrice int64 `json:"ActualPrice"`
 	// Attach 透传信息，即下单时传的 attach。
-	Attach string `json:"Attach" xml:"Attach"`
+	Attach string `json:"Attach"`
 }
 
 // TeamInfo 是拼团信息。
 type TeamInfo struct {
 	// ActivityID 活动 id。
-	ActivityID string `json:"ActivityId" xml:"ActivityId"`
+	ActivityID string `json:"ActivityId"`
 	// TeamID 团 id。
-	TeamID string `json:"TeamId" xml:"TeamId"`
+	TeamID string `json:"TeamId"`
 	// TeamType 团类型：1-支付全部、拼成退款。
-	TeamType int `json:"TeamType" xml:"TeamType"`
+	TeamType int `json:"TeamType"`
 	// TeamAction 0-创团、1-参团。
-	TeamAction int `json:"TeamAction" xml:"TeamAction"`
+	TeamAction int `json:"TeamAction"`
 }
 
 // GoodsDeliverNotify 是道具发货推送。
@@ -190,85 +177,85 @@ type TeamInfo struct {
 type GoodsDeliverNotify struct {
 	CommonNotifyFields
 	// OpenID 用户 openid。
-	OpenID string `json:"OpenId" xml:"OpenId"`
+	OpenID string `json:"OpenId"`
 	// OutTradeNo 业务订单号。
-	OutTradeNo string `json:"OutTradeNo" xml:"OutTradeNo"`
+	OutTradeNo string `json:"OutTradeNo"`
 	// Env 环境标识。本包只支持现网，恒为 0。
-	Env int `json:"Env" xml:"Env"`
+	Env int `json:"Env"`
 	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
-	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo" xml:"WeChatPayInfo"`
+	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo"`
 	// GoodsInfo 道具参数信息。
-	GoodsInfo *GoodsInfo `json:"GoodsInfo" xml:"GoodsInfo"`
+	GoodsInfo *GoodsInfo `json:"GoodsInfo"`
 	// TeamInfo 拼团信息。非拼团场景没有。
-	TeamInfo *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
+	TeamInfo *TeamInfo `json:"TeamInfo"`
 }
 
 // CoinPayNotify 是代币支付推送。
 type CoinPayNotify struct {
 	CommonNotifyFields
 	// OpenID 用户 openid。
-	OpenID string `json:"OpenId" xml:"OpenId"`
+	OpenID string `json:"OpenId"`
 	// OutTradeNo 业务订单号。
-	OutTradeNo string `json:"OutTradeNo" xml:"OutTradeNo"`
+	OutTradeNo string `json:"OutTradeNo"`
 	// Env 环境标识。本包只支持现网，恒为 0。
-	Env int `json:"Env" xml:"Env"`
+	Env int `json:"Env"`
 	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
-	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo" xml:"WeChatPayInfo"`
+	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo"`
 	// CoinInfo 代币参数信息。
-	CoinInfo *CoinInfo `json:"CoinInfo" xml:"CoinInfo"`
+	CoinInfo *CoinInfo `json:"CoinInfo"`
 	// TeamInfo 拼团信息。非拼团场景没有。
-	TeamInfo *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
+	TeamInfo *TeamInfo `json:"TeamInfo"`
 }
 
 // RefundNotify 是退款完成推送。
 type RefundNotify struct {
 	CommonNotifyFields
 	// OpenID 用户 openid。
-	OpenID      string `json:"OpenId" xml:"OpenId"`
-	WxRefundID  string `json:"WxRefundId" xml:"WxRefundId"`   // 微信退款单号
-	MchRefundID string `json:"MchRefundId" xml:"MchRefundId"` // 商户退款单号
-	WxOrderID   string `json:"WxOrderId" xml:"WxOrderId"`     // 退款单对应支付单的微信单号
-	MchOrderID  string `json:"MchOrderId" xml:"MchOrderId"`   // 退款单对应支付单的商户单号
-	RefundFee   int64  `json:"RefundFee" xml:"RefundFee"`     // 退款金额，单位分
-	RetCode     int    `json:"RetCode" xml:"RetCode"`         // 退款结果，0 成功，非 0 失败
-	RetMsg      string `json:"RetMsg" xml:"RetMsg"`           // 退款结果详情，失败时为原因
+	OpenID      string `json:"OpenId"`
+	WxRefundID  string `json:"WxRefundId"`  // 微信退款单号
+	MchRefundID string `json:"MchRefundId"` // 商户退款单号
+	WxOrderID   string `json:"WxOrderId"`   // 退款单对应支付单的微信单号
+	MchOrderID  string `json:"MchOrderId"`  // 退款单对应支付单的商户单号
+	RefundFee   int64  `json:"RefundFee"`   // 退款金额，单位分
+	RetCode     int    `json:"RetCode"`     // 退款结果，0 成功，非 0 失败
+	RetMsg      string `json:"RetMsg"`      // 退款结果详情，失败时为原因
 	// RefundStartTime 开始退款时间，秒级时间戳。
-	RefundStartTime int64 `json:"RefundStartTimestamp" xml:"RefundStartTimestamp"`
+	RefundStartTime int64 `json:"RefundStartTimestamp"`
 	// RefundSuccTime 结束退款时间，秒级时间戳。
-	RefundSuccTime int64 `json:"RefundSuccTimestamp" xml:"RefundSuccTimestamp"`
+	RefundSuccTime int64 `json:"RefundSuccTimestamp"`
 	// WxpayRefundTxID 退款单的微信支付单号。
-	WxpayRefundTxID string `json:"WxpayRefundTransactionId" xml:"WxpayRefundTransactionId"`
+	WxpayRefundTxID string `json:"WxpayRefundTransactionId"`
 	// RetryTimes 重试次数，从 0 开始。重试间隔 2、4、8、16… 最多 15 次。
-	RetryTimes int `json:"RetryTimes" xml:"RetryTimes"`
+	RetryTimes int `json:"RetryTimes"`
 	// Attach iOS 退款通知附带：下单/签约时的 attach（选填）。
-	Attach string `json:"Attach" xml:"Attach"`
+	Attach string `json:"Attach"`
 	// WxTransactionID iOS 退款通知附带：原支付订单的 TransactionId（选填）。
-	WxTransactionID string `json:"WxTransactionId" xml:"WxTransactionId"`
+	WxTransactionID string `json:"WxTransactionId"`
 	// TeamInfo 拼团信息。非拼团场景没有。
-	TeamInfo *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
+	TeamInfo *TeamInfo `json:"TeamInfo"`
 }
 
 // ComplaintNotify 是用户投诉推送。
 type ComplaintNotify struct {
 	CommonNotifyFields
 	// OpenID 用户 openid。
-	OpenID string `json:"OpenId" xml:"OpenId"`
+	OpenID string `json:"OpenId"`
 	// WxOrderID 微信单号。
-	WxOrderID string `json:"WxOrderId" xml:"WxOrderId"`
+	WxOrderID string `json:"WxOrderId"`
 	// MchOrderID 商户单号。
-	MchOrderID string `json:"MchOrderId" xml:"MchOrderId"`
+	MchOrderID string `json:"MchOrderId"`
 	// TransactionID 微信支付交易单号。
-	TransactionID string `json:"TransactionId" xml:"TransactionId"`
+	TransactionID string `json:"TransactionId"`
 	// ComplaintID 投诉单号，用它调 GetComplaintDetail / ResponseComplaint。
-	ComplaintID string `json:"ComplaintId" xml:"ComplaintId"`
+	ComplaintID string `json:"ComplaintId"`
 	// ComplaintDetail 投诉详情。
-	ComplaintDetail string `json:"ComplaintDetail" xml:"ComplaintDetail"`
+	ComplaintDetail string `json:"ComplaintDetail"`
 	// ComplaintTime 投诉时间，秒级时间戳。
-	ComplaintTime int64 `json:"ComplaintTime" xml:"ComplaintTime"`
+	ComplaintTime int64 `json:"ComplaintTime"`
 	// RetryTimes 重试次数，从 0 开始。
-	RetryTimes int `json:"RetryTimes" xml:"RetryTimes"`
+	RetryTimes int `json:"RetryTimes"`
 	// RequestID 请求编号。
-	RequestID string `json:"RequestId" xml:"RequestId"`
+	RequestID string `json:"RequestId"`
 }
 
 // WxpayCallbackEventType 是微信支付风控通知的类型。
@@ -283,25 +270,25 @@ const (
 type WxpayCallbackNotify struct {
 	CommonNotifyFields
 	// AppID 小程序 AppID。
-	AppID string `json:"AppId" xml:"AppId"`
+	AppID string `json:"AppId"`
 	// NickName 小程序昵称。
-	NickName string `json:"NickName" xml:"NickName"`
+	NickName string `json:"NickName"`
 	// MerchantCode 微信支付商户号。
-	MerchantCode string `json:"MerchantCode" xml:"MerchantCode"`
+	MerchantCode string `json:"MerchantCode"`
 	// MerchantCompanyName 商户全称。
-	MerchantCompanyName string `json:"MerchantCompanyName" xml:"MerchantCompanyName"`
+	MerchantCompanyName string `json:"MerchantCompanyName"`
 	// BusinessTime 业务发生时间，格式 2026-07-03T12:47:13+08:00。
-	BusinessTime string `json:"BusinessTime" xml:"BusinessTime"`
+	BusinessTime string `json:"BusinessTime"`
 	// BusinessCode 业务单据号，可与 RecoverySpecification.LimitationCaseID 关联。
-	BusinessCode string `json:"BusinessCode" xml:"BusinessCode"`
+	BusinessCode string `json:"BusinessCode"`
 	// BusinessState 业务状态枚举。
-	BusinessState string `json:"BusinessState" xml:"BusinessState"`
+	BusinessState string `json:"BusinessState"`
 	// Remark 备注说明。
-	Remark string `json:"Remark" xml:"Remark"`
+	Remark string `json:"Remark"`
 	// EventType 通知类型：尽职调查或管控流水。
-	EventType WxpayCallbackEventType `json:"EventType" xml:"EventType"`
+	EventType WxpayCallbackEventType `json:"EventType"`
 	// RetryTimes 重试次数，从 0 开始。
-	RetryTimes int `json:"RetryTimes" xml:"RetryTimes"`
+	RetryTimes int `json:"RetryTimes"`
 }
 
 // IOSProvideStatus 是 iOS 退款问询里的发货状态。
@@ -322,23 +309,23 @@ const (
 // 连续 3 次、3 秒内未应答，平台会向 Apple 返回「不确定」。
 type IOSRefundQueryNotify struct {
 	// RefundTime 问询时间，Unix 时间戳。
-	RefundTime string `json:"refund_time" xml:"refund_time"`
+	RefundTime string `json:"refund_time"`
 	// OrderTime 该笔退款对应的交易时间，Unix 时间戳。
-	OrderTime string `json:"order_time" xml:"order_time"`
+	OrderTime string `json:"order_time"`
 	// ChannelBill Apple 支付票据号。
-	ChannelBill string `json:"channel_bill" xml:"channel_bill"`
+	ChannelBill string `json:"channel_bill"`
 	// BundleID 应用的 Apple bundleid。
-	BundleID string `json:"bundleid" xml:"bundleid"`
+	BundleID string `json:"bundleid"`
 	// ProductID 道具 ID。
-	ProductID string `json:"product_id" xml:"product_id"`
+	ProductID string `json:"product_id"`
 	// PCount 道具/代币数量。
-	PCount string `json:"p_count" xml:"p_count"`
+	PCount string `json:"p_count"`
 	// RefundRequestReason 用户请求退款的原因。
-	RefundRequestReason string `json:"refund_request_reason" xml:"refund_request_reason"`
+	RefundRequestReason string `json:"refund_request_reason"`
 	// ProvideStatus 发货状态。
-	ProvideStatus IOSProvideStatus `json:"provide_status" xml:"provide_status"`
+	ProvideStatus IOSProvideStatus `json:"provide_status"`
 	// PayOrderID 退款对应支付订单号。
-	PayOrderID string `json:"pay_order_id" xml:"pay_order_id"`
+	PayOrderID string `json:"pay_order_id"`
 }
 
 // Parse 解析一次推送：验签（必要时解密）→ 识别事件 → 反序列化为对应结构。
@@ -351,9 +338,8 @@ type IOSRefundQueryNotify struct {
 // 任何一步不过都返回错误——调用方应当把错误直接回给微信（不返回成功应答），
 // 微信会重试；**绝不要在验签失败时仍然发货**。
 func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
-	format, err := detectFormat(body)
-	if err != nil {
-		return nil, err
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil, errors.New("wechat_virtualpay_go: 推送请求体为空")
 	}
 
 	timestamp := query.Get("timestamp")
@@ -373,9 +359,9 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 			return nil, errors.New("wechat_virtualpay_go: 收到安全模式推送，但 NotifyConfig 未配置 EncodingAESKey")
 		}
 		var envelope struct {
-			Encrypt string `json:"Encrypt" xml:"Encrypt"`
+			Encrypt string `json:"Encrypt"`
 		}
-		if err := unmarshalByFormat(format, body, &envelope); err != nil {
+		if err := json.Unmarshal(body, &envelope); err != nil {
 			return nil, fmt.Errorf("wechat_virtualpay_go: 解析安全模式信封失败: %w", err)
 		}
 		if envelope.Encrypt == "" {
@@ -385,21 +371,18 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 		if !verifyEncryptedSignature(n.notifyToken, timestamp, nonce, envelope.Encrypt, query.Get("msg_signature")) {
 			return nil, ErrInvalidSignature
 		}
-		plain, err = aesDecrypt(n.aesKey, envelope.Encrypt, n.appID)
+		decrypted, err := aesDecrypt(n.aesKey, envelope.Encrypt, n.appID)
 		if err != nil {
 			return nil, err
 		}
-		// 解密出来的明文可能是另一种格式，重新探测。
-		if format, err = detectFormat(plain); err != nil {
-			return nil, fmt.Errorf("wechat_virtualpay_go: 解密后的明文格式无法识别: %w", err)
-		}
+		plain = decrypted
 	} else {
 		if !verifyPlainSignature(n.notifyToken, timestamp, nonce, query.Get("signature")) {
 			return nil, ErrInvalidSignature
 		}
 	}
 
-	return parseNotification(format, plain)
+	return parseNotification(plain)
 }
 
 // ParseHTTP 是 Parse 的便捷封装，直接从 *http.Request 取值。
@@ -414,7 +397,7 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 //	case wechat_virtualpay_go.EventGoodsDeliver:
 //		// 幂等发货…
 //	}
-//	body, ct := wechat_virtualpay_go.Ack(notif.Format)
+//	body, ct := wechat_virtualpay_go.Ack()
 func (n *Notifier) ParseHTTP(r *http.Request) (*Notification, error) {
 	body, err := readAllLimited(r)
 	if err != nil {
@@ -442,43 +425,30 @@ func readAllLimited(r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
-// detectFormat 通过首个非空白字符判断报文格式。
-func detectFormat(body []byte) (NotifyFormat, error) {
-	trimmed := bytes.TrimLeft(body, " \t\r\n")
-	if len(trimmed) == 0 {
-		return "", errors.New("wechat_virtualpay_go: 推送请求体为空")
-	}
-	switch trimmed[0] {
-	case '{':
-		return NotifyFormatJSON, nil
-	case '<':
-		return NotifyFormatXML, nil
-	default:
-		return "", fmt.Errorf("wechat_virtualpay_go: 无法识别的推送格式（首字符 %q）", trimmed[0])
-	}
-}
-
-// unmarshalByFormat 按给定格式反序列化（事件结构体同时带有 json 与 xml tag）。
-func unmarshalByFormat(format NotifyFormat, data []byte, out any) error {
-	if format == NotifyFormatXML {
-		return xml.Unmarshal(data, out)
-	}
-	return json.Unmarshal(data, out)
-}
-
 // parseNotification 识别事件类型并填充对应结构。
-func parseNotification(format NotifyFormat, plain []byte) (*Notification, error) {
+func parseNotification(plain []byte) (*Notification, error) {
 	var header struct {
-		Event string `json:"Event" xml:"Event"`
+		Event string `json:"Event"`
 	}
-	if err := unmarshalByFormat(format, plain, &header); err != nil {
+	if err := json.Unmarshal(plain, &header); err != nil {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析推送事件头失败: %w", err)
 	}
 
 	notif := &Notification{
-		Event:  NotifyEvent(header.Event),
-		Format: format,
-		Plain:  plain,
+		Event: NotifyEvent(header.Event),
+		Plain: plain,
+	}
+
+	// iOS 退款问询是特殊的一类：它的报文**不带 Event 字段**（字段全是 snake_case），
+	// 上面的分派识别不到。用它的特征字段兜底认出来。
+	if notif.Event == "" {
+		if !isIOSRefundQueryPayload(plain) {
+			// 完全没有 Event，说明这根本不是一条推送。
+			// ⚠️ 这里**不能**放行：调用方会把「解析成功」当成「收到了真实推送」，
+			// 照常回成功应答，微信便不再重推——这条推送就永久丢了。
+			return nil, errors.New("wechat_virtualpay_go: 推送报文里没有 Event 字段，无法识别事件类型")
+		}
+		notif.Event = EventIOSRefundQuery
 	}
 
 	// 注意：必须让 notif 的字段与 target 指向**同一个对象**。
@@ -510,50 +480,61 @@ func parseNotification(format NotifyFormat, plain []byte) (*Notification, error)
 		return notif, nil
 	}
 
-	if err := unmarshalByFormat(format, plain, target); err != nil {
+	if err := json.Unmarshal(plain, target); err != nil {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
 }
 
-// ackPayload 是虚拟支付推送的应答体。
+// isIOSRefundQueryPayload 判断一段推送明文是不是 iOS 退款问询。
 //
-// 不用 xml 的 `,cdata` 选项：该选项能序列化但不能反序列化（同一个类型反序列化会
-// 报 invalid tag），是个容易踩的坑。普通转义后的 XML 微信同样接受。
+// 该事件的报文没有 Event 字段（官方字段表里全是 refund_time / channel_bill 这类
+// snake_case 字段），所以没法靠事件名分派，只能靠特征字段识别。channel_bill
+// （Apple 支付票据号）与 bundleid 是它独有的，同时出现即可判定。
+//
+// ⚠️ 这是**基于文档字段表的推断**：若线上实测该事件其实带 Event 字段，这段兜底就
+// 是多余的（但不会误判——正常事件走的是上面的 Event 分派）。
+func isIOSRefundQueryPayload(plain []byte) bool {
+	var probe struct {
+		ChannelBill string `json:"channel_bill"`
+		BundleID    string `json:"bundleid"`
+	}
+	if err := json.Unmarshal(plain, &probe); err != nil {
+		return false
+	}
+	return probe.ChannelBill != "" && probe.BundleID != ""
+}
+
+// ackPayload 是虚拟支付推送的应答体。
 type ackPayload struct {
 	// ErrCode 应答状态。0 表示成功，其他值微信会重试。
-	ErrCode int `json:"ErrCode" xml:"ErrCode"`
+	ErrCode int `json:"ErrCode"`
 	// ErrMsg 错误信息，用于调试。
-	ErrMsg string `json:"ErrMsg" xml:"ErrMsg"`
+	ErrMsg string `json:"ErrMsg"`
 }
 
 // Ack 生成成功应答（等价于 ErrCode=0）。
 //
 // 应答成功即表示"已处理完，别再推了"。**务必确认发货真的落地了再回成功**——
 // 回了成功但没发货，微信不会重试，这笔单就永久丢了。
-func Ack(format NotifyFormat) (body []byte, contentType string) {
-	return marshalAck(format, ackPayload{ErrCode: 0, ErrMsg: "success"})
+//
+// 第二个返回值是 Content-Type，直接写进响应头即可。
+func Ack() (body []byte, contentType string) {
+	return marshalAck(ackPayload{ErrCode: 0, ErrMsg: "success"})
 }
 
 // AckError 生成失败应答，微信会按 2、4、8、16… 的间隔重试，最多 15 次。
-func AckError(format NotifyFormat, errCode int, errMsg string) (body []byte, contentType string) {
-	return marshalAck(format, ackPayload{ErrCode: errCode, ErrMsg: errMsg})
+func AckError(errCode int, errMsg string) (body []byte, contentType string) {
+	return marshalAck(ackPayload{ErrCode: errCode, ErrMsg: errMsg})
 }
 
-func marshalAck(format NotifyFormat, p ackPayload) ([]byte, string) {
-	if format == NotifyFormatXML {
-		body, err := xml.Marshal(p)
-		if err != nil {
-			// 结构固定，不可能失败；兜底返回一个合法的 XML 应答。
-			return []byte(`<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>`), format.ContentType()
-		}
-		return append([]byte(xml.Header), body...), format.ContentType()
-	}
+func marshalAck(p ackPayload) ([]byte, string) {
 	body, err := json.Marshal(p)
 	if err != nil {
-		return []byte(`{"ErrCode":0,"ErrMsg":"success"}`), format.ContentType()
+		// 结构固定（一个 int、一个 string），json.Marshal 不会失败；兜底给个合法应答。
+		return []byte(`{"ErrCode":0,"ErrMsg":"success"}`), notifyContentType
 	}
-	return body, format.ContentType()
+	return body, notifyContentType
 }
 
 // IOSRefundQueryResponse 是 iOS 退款问询的应答内容。
@@ -571,13 +552,26 @@ type IOSRefundQueryResponse struct {
 
 // EncryptResponse 在安全模式下加密一段应答明文。
 //
-// 安全模式的普通应答（如 ErrCode 形式）无需加密，直接回即可；本方法用于需要返回
-// **结构化内容**的场景（典型是 iOS 退款问询）。它会生成 16 字节随机串，并按微信
-// 要求的信封格式返回。
-func (n *Notifier) EncryptResponse(plain []byte, format NotifyFormat) ([]byte, error) {
+// 安全模式的**普通应答**（ErrCode 那种）无需加密，直接回即可；本方法用于需要返回
+// **结构化内容**的场景，典型是 iOS 退款问询。
+//
+// nonce 要传**请求 URL 上的 nonce 原值**——微信要求回包的 Nonce 与请求一致。
+//
+// 官方要求的加密回包是**四个字段，缺一不可**：
+//
+//	Encrypt + MsgSignature + TimeStamp + Nonce
+//
+// 其中 MsgSignature = sha1( sort([Token, TimeStamp, Nonce, Encrypt]) )。
+// 少了任何一个，微信都视为无效应答；iOS 退款问询在「3 秒 / 3 次」的约束下会直接
+// 被判为「不确定」。
+func (n *Notifier) EncryptResponse(plain []byte, nonce string) ([]byte, error) {
 	if n.aesKey == nil {
 		return nil, errors.New("wechat_virtualpay_go: 未配置 EncodingAESKey，无法加密应答（明文模式直接返回明文即可）")
 	}
+	if nonce == "" {
+		return nil, errors.New("wechat_virtualpay_go: EncryptResponse 需要请求 URL 上的 nonce 原值")
+	}
+
 	random16, err := randomBytes(16)
 	if err != nil {
 		return nil, err
@@ -586,14 +580,17 @@ func (n *Notifier) EncryptResponse(plain []byte, format NotifyFormat) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if format == NotifyFormatXML {
-		return []byte(fmt.Sprintf("<xml><Encrypt><![CDATA[%s]]></Encrypt></xml>", encrypt)), nil
-	}
-	body, err := json.Marshal(map[string]string{"Encrypt": encrypt})
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
+
+	timeStamp := time.Now().Unix()
+	msgSignature := sha1SortedHex(n.notifyToken, strconv.FormatInt(timeStamp, 10), nonce, encrypt)
+
+	envelope := struct {
+		Encrypt      string `json:"Encrypt"`
+		MsgSignature string `json:"MsgSignature"`
+		TimeStamp    int64  `json:"TimeStamp"`
+		Nonce        string `json:"Nonce"`
+	}{encrypt, msgSignature, timeStamp, nonce}
+	return json.Marshal(envelope)
 }
 
 // IsKnownEvent 判断事件类型是否为本包已知的 6 类之一。
