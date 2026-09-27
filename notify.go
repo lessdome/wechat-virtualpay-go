@@ -38,8 +38,10 @@ const (
 type NotifyFormat string
 
 const (
+	// NotifyFormatJSON 报文为 JSON 格式，形如 {"ToUserName":"...","Event":"..."}。
 	NotifyFormatJSON NotifyFormat = "json"
-	NotifyFormatXML  NotifyFormat = "xml"
+	// NotifyFormatXML 报文为 XML 格式，形如 <xml><ToUserName>...</ToUserName></xml>。
+	NotifyFormatXML NotifyFormat = "xml"
 )
 
 // ContentType 返回该格式对应的 HTTP Content-Type。
@@ -153,16 +155,22 @@ type GoodsInfo struct {
 
 // CoinInfo 是代币参数信息。
 type CoinInfo struct {
-	Quantity    int64  `json:"Quantity" xml:"Quantity"`       // 数量
-	OrigPrice   int64  `json:"OrigPrice" xml:"OrigPrice"`     // 原始价格，单位分
-	ActualPrice int64  `json:"ActualPrice" xml:"ActualPrice"` // 实际支付价格，单位分
-	Attach      string `json:"Attach" xml:"Attach"`           // 透传信息
+	// Quantity 数量。
+	Quantity int64 `json:"Quantity" xml:"Quantity"`
+	// OrigPrice 原始价格，单位分。
+	OrigPrice int64 `json:"OrigPrice" xml:"OrigPrice"`
+	// ActualPrice 实际支付价格，单位分。
+	ActualPrice int64 `json:"ActualPrice" xml:"ActualPrice"`
+	// Attach 透传信息，即下单时传的 attach。
+	Attach string `json:"Attach" xml:"Attach"`
 }
 
 // TeamInfo 是拼团信息。
 type TeamInfo struct {
+	// ActivityID 活动 id。
 	ActivityID string `json:"ActivityId" xml:"ActivityId"`
-	TeamID     string `json:"TeamId" xml:"TeamId"`
+	// TeamID 团 id。
+	TeamID string `json:"TeamId" xml:"TeamId"`
 	// TeamType 团类型：1-支付全部、拼成退款。
 	TeamType int `json:"TeamType" xml:"TeamType"`
 	// TeamAction 0-创团、1-参团。
@@ -181,61 +189,86 @@ type TeamInfo struct {
 // success 回调可能丢失（用户异常退出等），推送也可能丢失。
 type GoodsDeliverNotify struct {
 	CommonNotifyFields
-	OpenID        string         `json:"OpenId" xml:"OpenId"`
-	OutTradeNo    string         `json:"OutTradeNo" xml:"OutTradeNo"`
-	Env           int            `json:"Env" xml:"Env"`
+	// OpenID 用户 openid。
+	OpenID string `json:"OpenId" xml:"OpenId"`
+	// OutTradeNo 业务订单号。
+	OutTradeNo string `json:"OutTradeNo" xml:"OutTradeNo"`
+	// Env 环境标识。本包只支持现网，恒为 0。
+	Env int `json:"Env" xml:"Env"`
+	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
 	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo" xml:"WeChatPayInfo"`
-	GoodsInfo     *GoodsInfo     `json:"GoodsInfo" xml:"GoodsInfo"`
-	TeamInfo      *TeamInfo      `json:"TeamInfo" xml:"TeamInfo"`
+	// GoodsInfo 道具参数信息。
+	GoodsInfo *GoodsInfo `json:"GoodsInfo" xml:"GoodsInfo"`
+	// TeamInfo 拼团信息。非拼团场景没有。
+	TeamInfo *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
 }
 
 // CoinPayNotify 是代币支付推送。
 type CoinPayNotify struct {
 	CommonNotifyFields
-	OpenID        string         `json:"OpenId" xml:"OpenId"`
-	OutTradeNo    string         `json:"OutTradeNo" xml:"OutTradeNo"`
-	Env           int            `json:"Env" xml:"Env"`
+	// OpenID 用户 openid。
+	OpenID string `json:"OpenId" xml:"OpenId"`
+	// OutTradeNo 业务订单号。
+	OutTradeNo string `json:"OutTradeNo" xml:"OutTradeNo"`
+	// Env 环境标识。本包只支持现网，恒为 0。
+	Env int `json:"Env" xml:"Env"`
+	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
 	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo" xml:"WeChatPayInfo"`
-	CoinInfo      *CoinInfo      `json:"CoinInfo" xml:"CoinInfo"`
-	TeamInfo      *TeamInfo      `json:"TeamInfo" xml:"TeamInfo"`
+	// CoinInfo 代币参数信息。
+	CoinInfo *CoinInfo `json:"CoinInfo" xml:"CoinInfo"`
+	// TeamInfo 拼团信息。非拼团场景没有。
+	TeamInfo *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
 }
 
 // RefundNotify 是退款完成推送。
 type RefundNotify struct {
 	CommonNotifyFields
-	OpenID          string `json:"OpenId" xml:"OpenId"`
-	WxRefundID      string `json:"WxRefundId" xml:"WxRefundId"`   // 微信退款单号
-	MchRefundID     string `json:"MchRefundId" xml:"MchRefundId"` // 商户退款单号
-	WxOrderID       string `json:"WxOrderId" xml:"WxOrderId"`     // 退款单对应支付单的微信单号
-	MchOrderID      string `json:"MchOrderId" xml:"MchOrderId"`   // 退款单对应支付单的商户单号
-	RefundFee       int64  `json:"RefundFee" xml:"RefundFee"`     // 退款金额，单位分
-	RetCode         int    `json:"RetCode" xml:"RetCode"`         // 退款结果，0 成功，非 0 失败
-	RetMsg          string `json:"RetMsg" xml:"RetMsg"`           // 退款结果详情，失败时为原因
-	RefundStartTime int64  `json:"RefundStartTimestamp" xml:"RefundStartTimestamp"`
-	RefundSuccTime  int64  `json:"RefundSuccTimestamp" xml:"RefundSuccTimestamp"`
+	// OpenID 用户 openid。
+	OpenID      string `json:"OpenId" xml:"OpenId"`
+	WxRefundID  string `json:"WxRefundId" xml:"WxRefundId"`   // 微信退款单号
+	MchRefundID string `json:"MchRefundId" xml:"MchRefundId"` // 商户退款单号
+	WxOrderID   string `json:"WxOrderId" xml:"WxOrderId"`     // 退款单对应支付单的微信单号
+	MchOrderID  string `json:"MchOrderId" xml:"MchOrderId"`   // 退款单对应支付单的商户单号
+	RefundFee   int64  `json:"RefundFee" xml:"RefundFee"`     // 退款金额，单位分
+	RetCode     int    `json:"RetCode" xml:"RetCode"`         // 退款结果，0 成功，非 0 失败
+	RetMsg      string `json:"RetMsg" xml:"RetMsg"`           // 退款结果详情，失败时为原因
+	// RefundStartTime 开始退款时间，秒级时间戳。
+	RefundStartTime int64 `json:"RefundStartTimestamp" xml:"RefundStartTimestamp"`
+	// RefundSuccTime 结束退款时间，秒级时间戳。
+	RefundSuccTime int64 `json:"RefundSuccTimestamp" xml:"RefundSuccTimestamp"`
+	// WxpayRefundTxID 退款单的微信支付单号。
 	WxpayRefundTxID string `json:"WxpayRefundTransactionId" xml:"WxpayRefundTransactionId"`
 	// RetryTimes 重试次数，从 0 开始。重试间隔 2、4、8、16… 最多 15 次。
 	RetryTimes int `json:"RetryTimes" xml:"RetryTimes"`
 	// Attach iOS 退款通知附带：下单/签约时的 attach（选填）。
 	Attach string `json:"Attach" xml:"Attach"`
 	// WxTransactionID iOS 退款通知附带：原支付订单的 TransactionId（选填）。
-	WxTransactionID string    `json:"WxTransactionId" xml:"WxTransactionId"`
-	TeamInfo        *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
+	WxTransactionID string `json:"WxTransactionId" xml:"WxTransactionId"`
+	// TeamInfo 拼团信息。非拼团场景没有。
+	TeamInfo *TeamInfo `json:"TeamInfo" xml:"TeamInfo"`
 }
 
 // ComplaintNotify 是用户投诉推送。
 type ComplaintNotify struct {
 	CommonNotifyFields
-	OpenID        string `json:"OpenId" xml:"OpenId"`
-	WxOrderID     string `json:"WxOrderId" xml:"WxOrderId"`
-	MchOrderID    string `json:"MchOrderId" xml:"MchOrderId"`
+	// OpenID 用户 openid。
+	OpenID string `json:"OpenId" xml:"OpenId"`
+	// WxOrderID 微信单号。
+	WxOrderID string `json:"WxOrderId" xml:"WxOrderId"`
+	// MchOrderID 商户单号。
+	MchOrderID string `json:"MchOrderId" xml:"MchOrderId"`
+	// TransactionID 微信支付交易单号。
 	TransactionID string `json:"TransactionId" xml:"TransactionId"`
 	// ComplaintID 投诉单号，用它调 GetComplaintDetail / ResponseComplaint。
-	ComplaintID     string `json:"ComplaintId" xml:"ComplaintId"`
+	ComplaintID string `json:"ComplaintId" xml:"ComplaintId"`
+	// ComplaintDetail 投诉详情。
 	ComplaintDetail string `json:"ComplaintDetail" xml:"ComplaintDetail"`
-	ComplaintTime   int64  `json:"ComplaintTime" xml:"ComplaintTime"`
-	RetryTimes      int    `json:"RetryTimes" xml:"RetryTimes"`
-	RequestID       string `json:"RequestId" xml:"RequestId"`
+	// ComplaintTime 投诉时间，秒级时间戳。
+	ComplaintTime int64 `json:"ComplaintTime" xml:"ComplaintTime"`
+	// RetryTimes 重试次数，从 0 开始。
+	RetryTimes int `json:"RetryTimes" xml:"RetryTimes"`
+	// RequestID 请求编号。
+	RequestID string `json:"RequestId" xml:"RequestId"`
 }
 
 // WxpayCallbackEventType 是微信支付风控通知的类型。
@@ -249,18 +282,26 @@ const (
 // WxpayCallbackNotify 是微信支付风控事件通知。
 type WxpayCallbackNotify struct {
 	CommonNotifyFields
-	AppID               string `json:"AppId" xml:"AppId"`
-	NickName            string `json:"NickName" xml:"NickName"`
-	MerchantCode        string `json:"MerchantCode" xml:"MerchantCode"`
+	// AppID 小程序 AppID。
+	AppID string `json:"AppId" xml:"AppId"`
+	// NickName 小程序昵称。
+	NickName string `json:"NickName" xml:"NickName"`
+	// MerchantCode 微信支付商户号。
+	MerchantCode string `json:"MerchantCode" xml:"MerchantCode"`
+	// MerchantCompanyName 商户全称。
 	MerchantCompanyName string `json:"MerchantCompanyName" xml:"MerchantCompanyName"`
 	// BusinessTime 业务发生时间，格式 2026-07-03T12:47:13+08:00。
 	BusinessTime string `json:"BusinessTime" xml:"BusinessTime"`
 	// BusinessCode 业务单据号，可与 RecoverySpecification.LimitationCaseID 关联。
-	BusinessCode  string                 `json:"BusinessCode" xml:"BusinessCode"`
-	BusinessState string                 `json:"BusinessState" xml:"BusinessState"`
-	Remark        string                 `json:"Remark" xml:"Remark"`
-	EventType     WxpayCallbackEventType `json:"EventType" xml:"EventType"`
-	RetryTimes    int                    `json:"RetryTimes" xml:"RetryTimes"`
+	BusinessCode string `json:"BusinessCode" xml:"BusinessCode"`
+	// BusinessState 业务状态枚举。
+	BusinessState string `json:"BusinessState" xml:"BusinessState"`
+	// Remark 备注说明。
+	Remark string `json:"Remark" xml:"Remark"`
+	// EventType 通知类型：尽职调查或管控流水。
+	EventType WxpayCallbackEventType `json:"EventType" xml:"EventType"`
+	// RetryTimes 重试次数，从 0 开始。
+	RetryTimes int `json:"RetryTimes" xml:"RetryTimes"`
 }
 
 // IOSProvideStatus 是 iOS 退款问询里的发货状态。
@@ -480,8 +521,10 @@ func parseNotification(format NotifyFormat, plain []byte) (*Notification, error)
 // 不用 xml 的 `,cdata` 选项：该选项能序列化但不能反序列化（同一个类型反序列化会
 // 报 invalid tag），是个容易踩的坑。普通转义后的 XML 微信同样接受。
 type ackPayload struct {
-	ErrCode int    `json:"ErrCode" xml:"ErrCode"`
-	ErrMsg  string `json:"ErrMsg" xml:"ErrMsg"`
+	// ErrCode 应答状态。0 表示成功，其他值微信会重试。
+	ErrCode int `json:"ErrCode" xml:"ErrCode"`
+	// ErrMsg 错误信息，用于调试。
+	ErrMsg string `json:"ErrMsg" xml:"ErrMsg"`
 }
 
 // Ack 生成成功应答（等价于 ErrCode=0）。

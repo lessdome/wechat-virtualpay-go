@@ -87,12 +87,18 @@ type ServiceOrderInfo struct {
 
 // Complaint 是一条用户投诉。
 type Complaint struct {
-	ComplaintID     string         `json:"complaint_id"`
-	ComplaintTime   string         `json:"complaint_time"` // 格式 yyyy-mm-dd'T'HH:MM:ssXXX
-	ComplaintDetail string         `json:"complaint_detail"`
-	ComplaintState  ComplaintState `json:"complaint_state"`
-	PayerPhone      string         `json:"payer_phone"`
-	PayerOpenID     string         `json:"payer_openid"`
+	// ComplaintID 投诉 ID。
+	ComplaintID string `json:"complaint_id"`
+	// ComplaintTime 投诉时间。
+	ComplaintTime string `json:"complaint_time"` // 格式 yyyy-mm-dd'T'HH:MM:ssXXX
+	// ComplaintDetail 投诉内容。
+	ComplaintDetail string `json:"complaint_detail"`
+	// ComplaintState 投诉状态。
+	ComplaintState ComplaintState `json:"complaint_state"`
+	// PayerPhone 投诉人联系方式。
+	PayerPhone string `json:"payer_phone"`
+	// PayerOpenID 投诉人在商户 AppID 下的唯一标识。
+	PayerOpenID string `json:"payer_openid"`
 	// ComplaintOrderInfo 投诉单关联的订单信息。
 	ComplaintOrderInfo []ComplaintOrderInfo `json:"complaint_order_info"`
 	// ComplaintFullRefunded 投诉单下所有订单是否已全部全额退款。

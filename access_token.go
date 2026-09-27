@@ -70,9 +70,12 @@ func (t *accessTokenSource) AccessToken(ctx context.Context) (string, error) {
 // 刻意不带 force_refresh：不传即为 false（普通模式），这正是我们要的。
 // 强制刷新会让上次的 access_token 立即失效，且每天限 20 次。
 type stableAccessTokenRequest struct {
+	// GrantType 固定填 client_credential。
 	GrantType string `json:"grant_type"`
-	AppID     string `json:"appid"`
-	Secret    string `json:"secret"`
+	// AppID 小程序 AppID。
+	AppID string `json:"appid"`
+	// Secret 小程序密钥。
+	Secret string `json:"secret"`
 }
 
 func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, error) {

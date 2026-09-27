@@ -95,6 +95,7 @@ type QueryOrderRequest struct {
 
 type queryOrderResponse struct {
 	responseHeader
+	// Order 订单信息。查不到时为 nil。
 	Order *Order `json:"order"`
 }
 

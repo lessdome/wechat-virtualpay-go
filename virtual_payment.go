@@ -79,15 +79,24 @@ type VirtualPaymentParams struct {
 // 字段顺序即签名串顺序，**不可随意调整**；且必须用结构体（而非 map），
 // 以保证序列化顺序稳定。
 type virtualPaymentBody struct {
-	OfferID              string `json:"offerId"`
-	BuyQuantity          int64  `json:"buyQuantity"`
-	Env                  int    `json:"env"`
-	CurrencyType         string `json:"currencyType"`
-	ProductID            string `json:"productId,omitempty"`
-	GoodsPrice           int64  `json:"goodsPrice,omitempty"`
-	ActivitySellingPrice int64  `json:"activitySellingPrice,omitempty"`
-	OutTradeNo           string `json:"outTradeNo"`
-	Attach               string `json:"attach"`
+	// OfferID 虚拟支付商户号。
+	OfferID string `json:"offerId"`
+	// BuyQuantity 购买数量。
+	BuyQuantity int64 `json:"buyQuantity"`
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
+	// CurrencyType 币种，目前只支持 CNY。
+	CurrencyType string `json:"currencyType"`
+	// ProductID 道具 ID。代币充值模式下不传。
+	ProductID string `json:"productId,omitempty"`
+	// GoodsPrice 道具单价，单位分。代币充值模式下不传。
+	GoodsPrice int64 `json:"goodsPrice,omitempty"`
+	// ActivitySellingPrice 道具优惠价，单位分；须与 GoodsPrice 一起传。
+	ActivitySellingPrice int64 `json:"activitySellingPrice,omitempty"`
+	// OutTradeNo 业务订单号。
+	OutTradeNo string `json:"outTradeNo"`
+	// Attach 透传数据，发货通知会原样带回。
+	Attach string `json:"attach"`
 }
 
 var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)

@@ -21,6 +21,7 @@ const defaultAPIBase = "https://api.weixin.qq.com"
 // 内嵌进每个请求结构体，保证序列化时始终带上这个协议要求的字段；字段本身是导出
 // 的（Go 的内嵌提升），但没有任何理由去改它。
 type envField struct {
+	// Env 环境标识。本包只支持现网，固定为 0。
 	Env int `json:"env"`
 }
 
@@ -29,8 +30,10 @@ type envField struct {
 // 微信开放接口成功时不返回 errcode；一旦出现非 0 的 errcode 即为失败。
 // 各接口自己的响应结构体嵌入本类型以复用解析。
 type responseHeader struct {
-	ErrCode int    `json:"errcode"`
-	ErrMsg  string `json:"errmsg"`
+	// ErrCode 微信错误码。成功响应里没有这个字段，一旦非 0 即为失败。
+	ErrCode int `json:"errcode"`
+	// ErrMsg 错误信息。
+	ErrMsg string `json:"errmsg"`
 }
 
 // authMode 描述一个接口需要哪种鉴权参数。

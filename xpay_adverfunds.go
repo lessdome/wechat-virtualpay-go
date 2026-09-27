@@ -28,13 +28,20 @@ const (
 
 // TransferAccount 是广告金充值账户。
 type TransferAccount struct {
-	TransferAccountName       string                    `json:"transfer_account_name"`
-	TransferAccountUID        int64                     `json:"transfer_account_uid"`
-	TransferAccountAgencyID   int64                     `json:"transfer_account_agency_id"`
-	TransferAccountAgencyName string                    `json:"transfer_account_agency_name"`
-	State                     TransferAccountState      `json:"state"`
-	BindResult                TransferAccountBindResult `json:"bind_result"`
-	ErrorMsg                  string                    `json:"error_msg"`
+	// TransferAccountName 充值账户名称。
+	TransferAccountName string `json:"transfer_account_name"`
+	// TransferAccountUID 充值账户 uid。
+	TransferAccountUID int64 `json:"transfer_account_uid"`
+	// TransferAccountAgencyID 充值账户服务商账号 id。
+	TransferAccountAgencyID int64 `json:"transfer_account_agency_id"`
+	// TransferAccountAgencyName 充值账户服务商账号名称。
+	TransferAccountAgencyName string `json:"transfer_account_agency_name"`
+	// State 审核状态。
+	State TransferAccountState `json:"state"`
+	// BindResult 绑定结果。
+	BindResult TransferAccountBindResult `json:"bind_result"`
+	// ErrorMsg 错误信息。
+	ErrorMsg string `json:"error_msg"`
 }
 
 // QueryTransferAccountRequest 是查询广告金充值账户的请求。
@@ -44,6 +51,7 @@ type QueryTransferAccountRequest struct {
 
 // QueryTransferAccountResponse 是查询广告金充值账户的响应。
 type QueryTransferAccountResponse struct {
+	// AcctList 广告金充值账户列表。
 	AcctList []TransferAccount `json:"acct_list"`
 }
 
@@ -101,8 +109,10 @@ type AdverFund struct {
 
 // QueryAdverFundsResponse 是查询广告金发放记录的响应。
 type QueryAdverFundsResponse struct {
+	// AdverFundsList 广告金发放记录列表。
 	AdverFundsList []AdverFund `json:"adver_funds_list"`
-	TotalPage      int         `json:"total_page"`
+	// TotalPage 查询命中总的页数。
+	TotalPage int `json:"total_page"`
 }
 
 // QueryAdverFunds 查询广告金发放记录。
@@ -212,6 +222,7 @@ type QueryFundsBillRequest struct {
 
 // FundsBill 是一条广告金充值记录。
 type FundsBill struct {
+	// BillID 充值单 ID。
 	BillID              string          `json:"bill_id"`
 	OperTime            int64           `json:"oper_time"`             // 充值时间，unix 秒级时间戳
 	SettleBegin         int64           `json:"settle_begin"`          // 结算周期开始时间
@@ -226,8 +237,10 @@ type FundsBill struct {
 
 // QueryFundsBillResponse 是查询广告金充值记录的响应。
 type QueryFundsBillResponse struct {
-	BillList  []FundsBill `json:"bill_list"`
-	TotalPage int         `json:"total_page"`
+	// BillList 广告金充值记录列表。
+	BillList []FundsBill `json:"bill_list"`
+	// TotalPage 查询命中总的页数。
+	TotalPage int `json:"total_page"`
 }
 
 // QueryFundsBill 查询广告金充值记录。
@@ -264,6 +277,7 @@ type QueryRecoverBillRequest struct {
 
 // RecoverBill 是一条广告金回收记录。
 type RecoverBill struct {
+	// BillID 回收单 ID。
 	BillID             string   `json:"bill_id"`
 	RecoverTime        int64    `json:"recover_time"`         // 回收时间，unix 秒级时间戳
 	SettleBegin        int64    `json:"settle_begin"`         // 结算周期开始时间
@@ -276,8 +290,10 @@ type RecoverBill struct {
 
 // QueryRecoverBillResponse 是查询广告金回收记录的响应。
 type QueryRecoverBillResponse struct {
-	BillList  []RecoverBill `json:"bill_list"`
-	TotalPage int           `json:"total_page"`
+	// BillList 广告金回收记录列表。
+	BillList []RecoverBill `json:"bill_list"`
+	// TotalPage 查询命中总的页数。
+	TotalPage int `json:"total_page"`
 }
 
 // QueryRecoverBill 查询广告金回收记录。

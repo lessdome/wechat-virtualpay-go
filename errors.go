@@ -15,6 +15,7 @@ type APIError struct {
 	Raw     []byte // 原始响应体，便于排查
 }
 
+// Error 实现 error 接口。
 func (e *APIError) Error() string {
 	return fmt.Sprintf("wechat_virtualpay_go: 微信接口错误 errcode=%d errmsg=%s", e.Code, e.Message)
 }
