@@ -74,21 +74,12 @@ client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
 内部走的是微信**稳定版**接口 `POST /cgi-bin/stable_token` 的普通模式。选它而不是旧的
 `GET /cgi-bin/token`，是因为它有两个关键性质：
 
-- 有效期内**重复调用不会更新** token
+- 有效期内**重复调用不会更新** `access_token`
 - 与旧接口**完全隔离，互不影响**
 
 **因此多实例各持一份内存缓存是安全的**——不会互相顶掉，不需要分布式锁、也不需要
 Redis 之类的集中式缓存。（旧的 `/cgi-bin/token` 才有「A 实例刷新会让 B 实例手上的
-token 失效」这个问题，所以文档里常见的「务必集中缓存」是针对旧接口的。）
-
-> 需要自己管理 token 时（典型是**第三方平台代商家调用**，要用
-> `authorizer_access_token`），改填 `AccessToken` 函数即可，它会覆盖 `AppSecret`：
->
-> ```go
-> AccessToken: func(ctx context.Context) (string, error) {
->     return myTokenCache.Get(ctx)
-> },
-> ```
+`access_token` 失效」这个问题，所以文档里常见的「务必集中缓存」是针对旧接口的。）
 
 `NewClient` 会校验配置并在缺项时报错。`Env` 同时决定**用哪个密钥**和**请求体里的
 `env` 字段**（现网 `0` / 沙箱 `1`）——收敛到一处，避免「现网用了沙箱 Key」这类事故。
