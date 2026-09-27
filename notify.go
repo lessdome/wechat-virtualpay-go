@@ -543,6 +543,9 @@ func marshalAck(p ackPayload) ([]byte, string) {
 
 // IOSRefundQueryResponse 是 iOS 退款问询的应答内容。
 //
+// 用它构造应答请调 Notifier.RespondIOSRefundQuery——**不要**用 Ack()，
+// 那个产出的是 ErrCode 形态，对这条问询是无效应答。
+//
 // ⚠️ 必须在 **3 秒内**返回，Apple 会问询三次。不要在这条路径上做耗时操作
 // （查库、调外部接口），否则会被判为「不确定」。
 type IOSRefundQueryResponse struct {
@@ -595,6 +598,53 @@ func (n *Notifier) EncryptResponse(plain []byte, nonce string) ([]byte, error) {
 		Nonce        string `json:"Nonce"`
 	}{encrypt, msgSignature, timeStamp, nonce}
 	return json.Marshal(envelope)
+}
+
+// RespondIOSRefundQuery 生成「iOS 退款问询」的应答体。
+//
+// 这条问询与别的推送不一样：官方规定的应答是 IOSRefundQueryResponse 那三个字段，
+// **不是** Ack() 的 ErrCode 形态——回错了微信会当无效应答，而 Apple 只问询三次、
+// 每次 3 秒，错过就等于把判定权交出去了。
+//
+// 明文模式直接回明文 JSON，nonce 传空串即可；安全模式（配了 EncodingAESKey）会自动
+// 加密并把 Nonce/MsgSignature/TimeStamp 一并带上，此时 nonce 要传**请求 URL 上的
+// nonce 原值**。
+//
+// 用法：
+//
+//	case wechat_virtualpay_go.EventIOSRefundQuery:
+//		body, ct, err := notifier.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
+//			ResultCode: 0,
+//			ResultInfo: "已发货，不予退款",
+//			Evidence:   "order 已发货并于 2026-01-01 被领取", // 必填，退款审计凭据
+//		}, r.URL.Query().Get("nonce"))
+//		if err != nil {
+//			// 兜底：回失败应答让微信重试，别静默返回
+//		}
+//		w.Header().Set("Content-Type", ct)
+//		w.Write(body)
+func (n *Notifier) RespondIOSRefundQuery(resp IOSRefundQueryResponse, nonce string) (body []byte, contentType string, err error) {
+	if resp.Evidence == "" {
+		// Evidence 是官方标注的必填项，退款审计要看它。缺了宁可不发，
+		// 也不要送一个微信会判无效的应答上去。
+		return nil, "", errors.New("wechat_virtualpay_go: IOSRefundQueryResponse.Evidence 必填（需给出建议退款/拒绝退款的依据）")
+	}
+
+	plain, err := json.Marshal(resp)
+	if err != nil {
+		return nil, "", fmt.Errorf("wechat_virtualpay_go: 序列化 iOS 退款问询应答失败: %w", err)
+	}
+
+	// 明文模式不需要签名，直接回明文。
+	if n.aesKey == nil {
+		return plain, notifyContentType, nil
+	}
+
+	encrypted, err := n.EncryptResponse(plain, nonce)
+	if err != nil {
+		return nil, "", err
+	}
+	return encrypted, notifyContentType, nil
 }
 
 // IsKnownEvent 判断事件类型是否为本包已知的 6 类之一。

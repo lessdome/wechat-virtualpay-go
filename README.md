@@ -288,6 +288,20 @@ switch notif.Event {
 case wechat_virtualpay_go.EventGoodsDeliver:
     g := notif.GoodsDeliver
     // 用 g.WeChatPayInfo.MchOrderNo 做幂等去重，发货…
+
+case wechat_virtualpay_go.EventIOSRefundQuery:
+    // ⚠️ 这条问询的应答**不是** Ack() 那种 ErrCode 形态，必须用 RespondIOSRefundQuery。
+    body, ct, err := notifier.RespondIOSRefundQuery(wechat_virtualpay_go.IOSRefundQueryResponse{
+        ResultCode: 0,                              // 0=放过、建议退款；1=拦截、拒绝退款
+        ResultInfo: "已发货，不予退款",
+        Evidence:   "该订单已于 2026-01-01 发放并被用户领取", // 必填，退款审计要看
+    }, r.URL.Query().Get("nonce")) // 安全模式下必须是请求 URL 上的 nonce 原值
+    if err != nil {
+        body, ct = wechat_virtualpay_go.AckError(1, err.Error())
+    }
+    w.Header().Set("Content-Type", ct)
+    w.Write(body)
+    return
 }
 
 body, contentType := wechat_virtualpay_go.Ack() // {"ErrCode":0,"ErrMsg":"success"}
@@ -300,7 +314,8 @@ body, contentType := wechat_virtualpay_go.Ack() // {"ErrCode":0,"ErrMsg":"succes
 2. **用平台单号做幂等。** 发货场景取 `WeChatPayInfo.MchOrderNo` 去重——微信会重试，
    同一单可能推多次。
 3. **iOS 退款问询有 3 秒硬限制。** `xpay_subscribe_ios_refund_query_notify` 要求 3 秒
-   内应答，Apple 会问询三次。这条路径上不要查库、不要调外部接口。
+   内应答，Apple 会问询三次。这条路径上不要查库、不要调外部接口。另外它的应答体
+   **不是** `Ack()` 那种形态，要用 `RespondIOSRefundQuery`（见上面的处理示例）。
 
 「推送」与「轮询 `QueryOrder`」建议**都实现**：`success` 回调可能丢失（用户异常
 退出），推送也可能丢失，两者互补最可靠。
