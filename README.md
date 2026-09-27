@@ -22,7 +22,7 @@
 | --- | --- |
 | 支付签名 `pay_sig`、用户态签名 `signature` | ✅ 已实现 |
 | 一致性 JSON 序列化（防 HTML 转义破坏签名） | ✅ 已实现 |
-| 下单参数构建 `BuildPaymentParams` | ✅ 已实现 |
+| 下单参数构建 `BuildVirtualPayment` | ✅ 已实现 |
 | 服务端接口 `/xpay/*`（官方 33 个） | ✅ 已实现 |
 | 推送验签、AES 解密与事件解析（6 类事件） | ✅ 已实现 |
 | `access_token` 获取与缓存 | ➖ 刻意不内置，见 `TokenProvider` |
@@ -62,7 +62,7 @@ if err != nil {
     log.Fatal(err)
 }
 
-params, err := client.BuildPaymentParams(wechat_virtualpay_go.PrepayRequest{
+params, err := client.BuildVirtualPayment(wechat_virtualpay_go.PrepayRequest{
     ProductID:  "prod_001",
     GoodsPrice: 100, // 单位：分
     OutTradeNo: "ORDER20260101001",

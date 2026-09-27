@@ -90,7 +90,7 @@ type prepayBody struct {
 
 var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 
-// BuildPaymentParams 构建支付参数（即业务所说的「下单」）。
+// BuildVirtualPayment 构建支付参数（即业务所说的「下单」）。
 //
 // 它**不发起任何网络请求** —— 虚拟支付的下单是服务端算好参数、
 // 由小程序端 wx.requestVirtualPayment 拉起的。本方法返回的 SignData / PaySig /
@@ -98,7 +98,7 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 //
 // 本方法保证：算签名用的字符串与返回的 SignData 是**同一个字节序列**，
 // 从根上杜绝「签名串与下发串不一致」这一高频错误。
-func (c *Client) BuildPaymentParams(req PrepayRequest) (*PrepayParams, error) {
+func (c *Client) BuildVirtualPayment(req PrepayRequest) (*PrepayParams, error) {
 	if err := validatePrepay(req); err != nil {
 		return nil, err
 	}
