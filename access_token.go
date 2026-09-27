@@ -13,9 +13,11 @@ import (
 
 // accessTokenRefreshMargin 是提前刷新的余量。
 //
-// 微信文档：稳定版接口在普通模式下会**提前 5 分钟**更新 access_token，
-// 因此留同样的余量即可，不必等到真正过期才换。
-const accessTokenRefreshMargin = 5 * time.Minute
+// 拿到新 token 后按 (expires_in − margin) 缓存，而不是等它真正过期才换。
+// 微信文档说普通模式下平台会**提前 5 分钟**更新 access_token；这里刻意留
+// **10 分钟**，是它的两倍——给网络往返和时钟偏差冗余，避免刚好卡在到期临界点
+// 上请求被阻塞。对 7200 秒的有效期来说，等于每 1 小时 50 分钟换一次。
+const accessTokenRefreshMargin = 10 * time.Minute
 
 // accessTokenSource 用「稳定版接口调用凭据」自动获取并缓存 access_token。
 //
