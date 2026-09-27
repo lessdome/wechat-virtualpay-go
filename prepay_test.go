@@ -36,21 +36,20 @@ func TestBuildPaymentParams_MatchesVector(t *testing.T) {
 		GoodsPrice: 100,
 		OutTradeNo: "ORDER20260101002",
 		Attach:     "x&y",
-		Platform:   PlatformIOS,
 		SessionKey: "test_session_key_abcdef",
 	})
 	if err != nil {
 		t.Fatalf("BuildPaymentParams: %v", err)
 	}
 
-	const wantSignData = `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","platform":"ios","productId":"a<b>&c","goodsPrice":100,"outTradeNo":"ORDER20260101002","attach":"x&y"}`
+	const wantSignData = `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","productId":"a<b>&c","goodsPrice":100,"outTradeNo":"ORDER20260101002","attach":"x&y"}`
 	if params.SignData != wantSignData {
 		t.Fatalf("SignData = %s\nwant      = %s", params.SignData, wantSignData)
 	}
-	if params.PaySig != "f9c7c448b71263a3b8b302e095cd62a169e4090ec5160b563fa75ad982491ba9" {
+	if params.PaySig != "540b7ce535b85c51f5419207c1a833f10765d1050254f21a1cfa23a2bcf4e271" {
 		t.Fatalf("PaySig = %s", params.PaySig)
 	}
-	if params.Signature != "e0a26d65ad5a32a52d89b5019d857e6ae398417cbf03813c4ad2414400fee81a" {
+	if params.Signature != "26c3c7d42d4edb1c86f744c67ce45945028520ad3295e4465ecccfa5f8f3a071" {
 		t.Fatalf("Signature = %s", params.Signature)
 	}
 	if params.Mode != ModeShortSeriesGoods {
@@ -64,7 +63,6 @@ func TestBuildPaymentParams_Defaults(t *testing.T) {
 		ProductID:  "prod_001",
 		GoodsPrice: 100,
 		OutTradeNo: "ORDER20260101003",
-		Platform:   PlatformAndroid,
 		SessionKey: "sk",
 	})
 	if err != nil {
@@ -82,7 +80,6 @@ func TestValidatePrepay(t *testing.T) {
 		ProductID:  "prod_001",
 		GoodsPrice: 100,
 		OutTradeNo: "ORDER20260101001",
-		Platform:   PlatformAndroid,
 		SessionKey: "sk",
 	}
 	cases := []struct {
@@ -95,8 +92,6 @@ func TestValidatePrepay(t *testing.T) {
 		{"OutTradeNo 太短", func(r *PrepayRequest) { r.OutTradeNo = "abc" }, true},
 		{"OutTradeNo 以下划线开头", func(r *PrepayRequest) { r.OutTradeNo = "_ORDER0001" }, true},
 		{"OutTradeNo 含非法字符", func(r *PrepayRequest) { r.OutTradeNo = "ORDER#0011" }, true},
-		{"Platform 为空", func(r *PrepayRequest) { r.Platform = "" }, true},
-		{"Platform 非法", func(r *PrepayRequest) { r.Platform = "harmony" }, true},
 		{"道具直购缺 ProductID", func(r *PrepayRequest) { r.ProductID = "" }, true},
 		{"道具直购缺 GoodsPrice", func(r *PrepayRequest) { r.GoodsPrice = 0 }, true},
 		{"代币充值可不传 ProductID/GoodsPrice", func(r *PrepayRequest) {

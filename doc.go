@@ -48,7 +48,6 @@
 //		ProductID:  "prod_001",
 //		GoodsPrice: 100, // 单位：分
 //		OutTradeNo: "ORDER20260101001",
-//		Platform:   virtualpay.PlatformIOS,
 //		SessionKey: sessionKey, // 由 code2Session 换取
 //	})
 //	// 把 params.SignData / params.PaySig / params.Signature 交给前端

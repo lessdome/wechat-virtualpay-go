@@ -11,17 +11,23 @@ import (
 // 注意：这是**签名用的 method**，不是 HTTP 路径；下单本身没有服务端请求。
 const payMethodRequestVirtualPayment = "requestVirtualPayment"
 
-// Platform 表示支付平台。
+// 关于「平台」：signData **没有** platform 字段。
 //
-// iOS 与 Android 差异极大（iOS 走 Apple IAP：费率约 12%、结算 45–60 天、
-// 开发者无法主动退款；Android 约 1%、T+3），因此必须显式指定。
-// 现有部分库把 platform 写死成 "android"，这在有 iOS 场景时直接不可用。
-type Platform string
-
-const (
-	PlatformAndroid Platform = "android"
-	PlatformIOS     Platform = "ios"
-)
+// 官方 wx.requestVirtualPayment 文档给出的 signData 示例为：
+//
+//	{"offerId":"123","buyQuantity":1,"env":0,"currencyType":"CNY",
+//	 "productId":"testproductId","goodsPrice":10,"outTradeNo":"xxxxxx","attach":"testdata"}
+//
+// 设备路由（Android/鸿蒙/Windows 走微信支付，iOS 走 Apple 支付）由微信**按客户端
+// 设备类型自动完成**，不需要也不应该在 signData 里指定平台。早期部分实现凭空加了
+// platform，那会让 signData 多出字段、与微信预期不一致（-15016 signData 格式有问题）。
+//
+// iOS 与 Android 的差异是**业务层面**的，真实存在且必须知道，但不影响下单参数：
+// iOS 走 Apple IAP，费率约 12%、结算 45–60 天、开发者无法主动退款；
+// Android 走微信支付，费率约 1%、T+3、可主动退款。
+//
+// 同样地，mode（道具直购/代币充值）也不是 signData 的一部分，而是
+// wx.requestVirtualPayment 的**顶层参数**，随 PayMode 单独交给前端。
 
 // PayMode 是 wx.requestVirtualPayment 的 mode 参数。
 // 注意：它**不属于 signData**，不参与签名，但要一并交给前端。
@@ -48,8 +54,6 @@ type PrepayRequest struct {
 	OutTradeNo string
 	// Attach 透传数据，发货通知会原样带回。
 	Attach string
-	// Platform 支付平台，必填。
-	Platform Platform
 	// SessionKey 由 wx.login 的 code 通过 code2Session 换取，用于计算 signature。必填。
 	SessionKey string
 	// Mode 支付模式，留空默认 ModeShortSeriesGoods。
@@ -77,7 +81,6 @@ type prepayBody struct {
 	BuyQuantity          int    `json:"buyQuantity"`
 	Env                  int    `json:"env"`
 	CurrencyType         string `json:"currencyType"`
-	Platform             string `json:"platform"`
 	ProductID            string `json:"productId,omitempty"`
 	GoodsPrice           int64  `json:"goodsPrice,omitempty"`
 	ActivitySellingPrice int64  `json:"activitySellingPrice,omitempty"`
@@ -114,7 +117,6 @@ func (c *Client) BuildPaymentParams(req PrepayRequest) (*PrepayParams, error) {
 		BuyQuantity:          qty,
 		Env:                  c.envInt(),
 		CurrencyType:         "CNY",
-		Platform:             string(req.Platform),
 		ProductID:            req.ProductID,
 		GoodsPrice:           req.GoodsPrice,
 		ActivitySellingPrice: req.ActivitySellingPrice,
@@ -151,14 +153,6 @@ func validatePrepay(req PrepayRequest) error {
 	if strings.HasPrefix(req.OutTradeNo, "_") {
 		return errors.New("virtualpay: OutTradeNo 不能以下划线开头")
 	}
-	switch req.Platform {
-	case PlatformAndroid, PlatformIOS:
-	case "":
-		return errors.New("virtualpay: Platform 不能为空（iOS 与 Android 费率与流程不同）")
-	default:
-		return fmt.Errorf("virtualpay: Platform %q 非法，只能是 android 或 ios", req.Platform)
-	}
-
 	mode := req.Mode
 	if mode == "" {
 		mode = ModeShortSeriesGoods

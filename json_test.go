@@ -12,7 +12,6 @@ type prepayBodyForTest struct {
 	BuyQuantity  int    `json:"buyQuantity"`
 	Env          int    `json:"env"`
 	CurrencyType string `json:"currencyType"`
-	Platform     string `json:"platform"`
 	ProductID    string `json:"productId"`
 	GoodsPrice   int64  `json:"goodsPrice"`
 	OutTradeNo   string `json:"outTradeNo"`
@@ -22,14 +21,13 @@ type prepayBodyForTest struct {
 // TestMarshalNoHTMLEscape 是本包最重要的一条回归测试：
 // 它锁死「序列化 → 签名」整条链路，防止 Go 的 HTML 转义把签名搞坏。
 func TestMarshalNoHTMLEscape(t *testing.T) {
-	const want = `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","platform":"ios","productId":"a<b>&c","goodsPrice":100,"outTradeNo":"ORDER20260101002","attach":"x&y"}`
+	const want = `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","productId":"a<b>&c","goodsPrice":100,"outTradeNo":"ORDER20260101002","attach":"x&y"}`
 
 	body := prepayBodyForTest{
 		OfferID:      "1234567890",
 		BuyQuantity:  1,
 		Env:          0,
 		CurrencyType: "CNY",
-		Platform:     "ios",
 		ProductID:    "a<b>&c",
 		GoodsPrice:   100,
 		OutTradeNo:   "ORDER20260101002",
@@ -61,7 +59,7 @@ func TestMarshalNoHTMLEscape(t *testing.T) {
 
 	// 3) 集成断言：用这份序列化结果算出的签名，必须等于 Python 交叉验证的期望值。
 	sig := CalcPaySig("test_app_key_1234567890", "requestVirtualPayment", string(got))
-	if sig != "f9c7c448b71263a3b8b302e095cd62a169e4090ec5160b563fa75ad982491ba9" {
+	if sig != "540b7ce535b85c51f5419207c1a833f10765d1050254f21a1cfa23a2bcf4e271" {
 		t.Fatalf("由序列化结果算出的签名不符: %s", sig)
 	}
 }

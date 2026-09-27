@@ -4,6 +4,9 @@ import "testing"
 
 // 本文件的期望值均由 scripts/gen_vectors.py（独立的 Python HMAC-SHA256 实现）生成，
 // 代码与脚本互相印证，避免"用同一个错误的实现自证正确"。
+//
+// 该脚本启动时**先对着微信官方文档正文里自带的 assert 样例自检**，自检不过就终止，
+// 因此它生成的向量可信。官方样例本身也固化成了 TestOfficialVectors。
 
 func TestCalcPaySig(t *testing.T) {
 	cases := []struct {
@@ -17,15 +20,15 @@ func TestCalcPaySig(t *testing.T) {
 			name:     "拉起支付（method 固定值，普通参数）",
 			appKey:   "test_app_key_1234567890",
 			method:   "requestVirtualPayment",
-			signData: `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","platform":"android","productId":"prod_001","goodsPrice":100,"outTradeNo":"ORDER20260101001","attach":"test"}`,
-			want:     "62a944504dbabe280e5a559280baecb11ee2b92237bb87eadd338a3bdf429d54",
+			signData: `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","productId":"prod_001","goodsPrice":100,"outTradeNo":"ORDER20260101001","attach":"test"}`,
+			want:     "101204af6c65f6f47b158dc99933ed6e1ddaf23152f226afc31b9e058c0d5357",
 		},
 		{
 			name:     "拉起支付（参数含 HTML 特殊字符 < > &）",
 			appKey:   "test_app_key_1234567890",
 			method:   "requestVirtualPayment",
-			signData: `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","platform":"ios","productId":"a<b>&c","goodsPrice":100,"outTradeNo":"ORDER20260101002","attach":"x&y"}`,
-			want:     "f9c7c448b71263a3b8b302e095cd62a169e4090ec5160b563fa75ad982491ba9",
+			signData: `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","productId":"a<b>&c","goodsPrice":100,"outTradeNo":"ORDER20260101002","attach":"x&y"}`,
+			want:     "540b7ce535b85c51f5419207c1a833f10765d1050254f21a1cfa23a2bcf4e271",
 		},
 		{
 			name:     "道具上传（method 为接口路径）",
@@ -51,12 +54,42 @@ func TestCalcPaySig(t *testing.T) {
 func TestCalcSignature(t *testing.T) {
 	const (
 		sessionKey = "test_session_key_abcdef"
-		signData   = `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","platform":"android","productId":"prod_001","goodsPrice":100,"outTradeNo":"ORDER20260101001","attach":"test"}`
-		want       = "4a375c7d1497aae1a17ba060589add5f65a65351f048716818d957ff6434952f"
+		signData   = `{"offerId":"1234567890","buyQuantity":1,"env":0,"currencyType":"CNY","productId":"prod_001","goodsPrice":100,"outTradeNo":"ORDER20260101001","attach":"test"}`
+		want       = "d98ead1b8e264829062e802822714fd9bcf4c774d402e04cc39a74860c7829e6"
 	)
 	if got := CalcSignature(sessionKey, signData); got != want {
 		t.Fatalf("CalcSignature() = %s\nwant             = %s", got, want)
 	}
+}
+
+// TestOfficialVectors 用的是**微信官方文档正文里自带 assert 的样例**——
+// 这是唯一来自腾讯而非本项目的期望值，比任何自生成向量都可信。
+//
+// 特别留意 post_body 里的空格：Go 的 json.Marshal 永远产不出这个串
+// （它会输出 `{"openid":"xxx",...}`，无空格）。所以这里只能原样硬编码。
+// 这恰好说明为什么 pay_sig 必须对「真正发出去的那串字节」计算——
+// 而不是「重新序列化一次再看是否等价」。
+func TestOfficialVectors(t *testing.T) {
+	const (
+		officialAppKey     = "12345"
+		officialSessionKey = "9hAb/NEYUlkaMBEsmFgzig=="
+		officialPostBody   = `{"openid": "xxx", "user_ip": "127.0.0.1", "env": 0}`
+		officialURI        = "/xpay/query_user_balance"
+	)
+
+	t.Run("pay_sig", func(t *testing.T) {
+		const want = "c37809f27c6d7fd1837ad2500a04512b66b34fd793a39a385fade56dca89a4b5"
+		if got := CalcPaySig(officialAppKey, officialURI, officialPostBody); got != want {
+			t.Fatalf("CalcPaySig() = %s\n官方期望     = %s", got, want)
+		}
+	})
+
+	t.Run("signature", func(t *testing.T) {
+		const want = "089d9e8dc5d308977360c4b79ec600a93d736802802a807d634192328032f6c7"
+		if got := CalcSignature(officialSessionKey, officialPostBody); got != want {
+			t.Fatalf("CalcSignature() = %s\n官方期望         = %s", got, want)
+		}
+	})
 }
 
 // 关键差异回归：pay_sig 会拼 method，signature 不拼。

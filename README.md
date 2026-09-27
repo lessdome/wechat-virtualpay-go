@@ -55,7 +55,6 @@ params, err := client.BuildPaymentParams(virtualpay.PrepayRequest{
     ProductID:  "prod_001",
     GoodsPrice: 100, // 单位：分
     OutTradeNo: "ORDER20260101001",
-    Platform:   virtualpay.PlatformIOS,
     SessionKey: sessionKey, // 由 code2Session 换取
 })
 // 把 params.SignData / params.PaySig / params.Signature 交给前端
@@ -86,7 +85,7 @@ Go 的 `json.Marshal` 默认会把 `<` `>` `&` 转义成 `<` / `>` / `&`。一�
 
 ## iOS 与 Android 的差异
 
-两端差异极大，因此 `Platform` 必须显式指定，不能写死：
+真实存在且必须知道，但**不影响下单参数**——signData 里没有 platform 字段，设备路由由微信按客户端自动完成（Android/鸿蒙/Windows 走微信支付，iOS 走 Apple 支付）。
 
 | | Android | iOS |
 | --- | --- | --- |
