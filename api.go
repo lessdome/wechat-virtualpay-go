@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 )
@@ -80,18 +79,13 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 		q.Set("signature", CalcSignature(sessionKey, signData))
 	}
 
-	endpoint := c.baseURL + uri + "?" + q.Encode()
+	endpoint := defaultAPIBase + uri + "?" + q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
 		return fmt.Errorf("wechat_virtualpay_go: 构造 %s 请求失败: %w", uri, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-
-	if c.cfg.Debug {
-		// 只打印 uri 与请求体，绝不打印 AppKey / access_token / 签名。
-		log.Printf("wechat_virtualpay_go: POST %s body=%s", uri, signData)
-	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -102,10 +96,6 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 	rawResp, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("wechat_virtualpay_go: 读取 %s 响应失败: %w", uri, err)
-	}
-
-	if c.cfg.Debug {
-		log.Printf("wechat_virtualpay_go: %s 响应 status=%d body=%s", uri, resp.StatusCode, rawResp)
 	}
 
 	if resp.StatusCode != http.StatusOK {

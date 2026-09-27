@@ -21,11 +21,10 @@ type Config struct {
 	// Tokens access_token 提供者，必填。
 	Tokens TokenProvider
 	// HTTPClient 可选，默认使用带 10s 超时的 client。
+	//
+	// 需要拦截请求、自定义日志或转发到代理时，注入一个带自定义 Transport 的
+	// client 即可——这是 Go 的惯用做法，本包不为此另设开关。
 	HTTPClient *http.Client
-	// BaseURL 可选，默认 https://api.weixin.qq.com；测试时可指向本地服务器。
-	BaseURL string
-	// Debug 可选，打印请求与响应。**绝不会打印 AppKey。**
-	Debug bool
 }
 
 // Client 是虚拟支付的客户端。
@@ -33,9 +32,8 @@ type Config struct {
 // 它是并发安全的：所有可变的调用都通过 HTTPClient 与 TokenProvider 完成，
 // Client 自身不持有可变状态。
 type Client struct {
-	cfg     Config
-	http    *http.Client
-	baseURL string
+	cfg  Config
+	http *http.Client
 }
 
 // NewClient 校验配置并构造 Client。
@@ -66,12 +64,8 @@ func NewClient(cfg Config) (*Client, error) {
 	if hc == nil {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
-	base := cfg.BaseURL
-	if base == "" {
-		base = defaultAPIBase
-	}
 
-	return &Client{cfg: cfg, http: hc, baseURL: base}, nil
+	return &Client{cfg: cfg, http: hc}, nil
 }
 
 // appKey 返回当前环境应使用的支付密钥。

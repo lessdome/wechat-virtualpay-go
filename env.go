@@ -29,5 +29,4 @@ func (e Env) String() string {
 //
 // 虚拟支付的 xpay 服务端接口走微信开放接口（access_token 鉴权），
 // 而非微信支付 APIv3（api.mch.weixin.qq.com）。
-// 可用 Config.BaseURL 覆盖（测试时指向本地假服务器）。
 const defaultAPIBase = "https://api.weixin.qq.com"
