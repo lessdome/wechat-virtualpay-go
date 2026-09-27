@@ -25,7 +25,7 @@
 | 下单参数构建 `BuildVirtualPayment` | ✅ 已实现 |
 | 服务端接口 `/xpay/*`（官方 33 个） | ✅ 已实现 |
 | 推送验签、AES 解密与事件解析（6 类事件） | ✅ 已实现 |
-| `access_token` 获取与缓存 | ➖ 刻意不内置，见 `Config.AccessToken` |
+| `access_token` 获取与缓存 | ✅ 内置（稳定版 `stable_token`）|
 
 ⚠️ **尚未真机联调，且仓库当前不含测试代码。**
 
@@ -56,40 +56,39 @@ go get github.com/lessdome/wechat_virtualpay_go
 
 ## 快速开始
 
-### 1. 提供 AccessToken
+### 1. 创建客户端
 
-`access_token` 的获取与缓存**刻意不内置**：缓存策略（内存 / 文件 / Redis）因部署形态
-而异，内置一种等于替使用者做决定。
-
-传一个「返回当前 token」的函数即可。**每次调用接口时都会来取一次**，所以 token
-过期能自动刷新，不需要重建 Client：
-
-```go
-func getToken(ctx context.Context) (string, error) {
-    // 1. 先读缓存；
-    // 2. 没有或快过期则调用 /cgi-bin/token 刷新；
-    // 3. 用分布式锁避免多实例并发刷新互相顶掉。
-}
-```
-
-> ⚠️ 微信的 `access_token` **全局唯一且会互相顶掉**——多实例部署务必集中缓存，
-> 否则 A 实例刷新会让 B 实例手上的 token 立即失效。
->
-> 也正因为它的**有效期只有约 2 小时**，本包刻意不接受静态字符串：写成固定值，
-> 长驻服务会在上线两小时后突然全线报错。
-
-### 2. 创建客户端
+填 `AppSecret` 即可，**token 的获取、缓存与刷新由本包负责**：
 
 ```go
 client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
-    AppID:       "wx...",
-    OfferID:     "1234567890",                        // 虚拟支付商户号
-    AppKey:      os.Getenv("VIRTUALPAY_APP_KEY"),     // 现网密钥
-    SandboxKey:  os.Getenv("VIRTUALPAY_SANDBOX_KEY"), // 沙箱密钥
-    Env:         wechat_virtualpay_go.EnvProduction,
-    AccessToken: getToken,
+    AppID:      "wx...",
+    OfferID:    "1234567890",                        // 虚拟支付商户号
+    AppKey:     os.Getenv("VIRTUALPAY_APP_KEY"),     // 现网密钥
+    SandboxKey: os.Getenv("VIRTUALPAY_SANDBOX_KEY"), // 沙箱密钥
+    Env:        wechat_virtualpay_go.EnvProduction,
+    AppSecret:  os.Getenv("VIRTUALPAY_APP_SECRET"),
 })
 ```
+
+内部走的是微信**稳定版**接口 `POST /cgi-bin/stable_token` 的普通模式。选它而不是旧的
+`GET /cgi-bin/token`，是因为它有两个关键性质：
+
+- 有效期内**重复调用不会更新** token
+- 与旧接口**完全隔离，互不影响**
+
+**因此多实例各持一份内存缓存是安全的**——不会互相顶掉，不需要分布式锁、也不需要
+Redis 之类的集中式缓存。（旧的 `/cgi-bin/token` 才有「A 实例刷新会让 B 实例手上的
+token 失效」这个问题，所以文档里常见的「务必集中缓存」是针对旧接口的。）
+
+> 需要自己管理 token 时（典型是**第三方平台代商家调用**，要用
+> `authorizer_access_token`），改填 `AccessToken` 函数即可，它会覆盖 `AppSecret`：
+>
+> ```go
+> AccessToken: func(ctx context.Context) (string, error) {
+>     return myTokenCache.Get(ctx)
+> },
+> ```
 
 `NewClient` 会校验配置并在缺项时报错。`Env` 同时决定**用哪个密钥**和**请求体里的
 `env` 字段**（现网 `0` / 沙箱 `1`）——收敛到一处，避免「现网用了沙箱 Key」这类事故。
@@ -97,7 +96,7 @@ client, err := wechat_virtualpay_go.NewClient(wechat_virtualpay_go.Config{
 `HTTPClient` 可选。需要拦截请求、自定义日志或走代理时，注入一个带自定义
 `http.RoundTripper` 的 client 即可——这是 Go 的惯用做法，本包不为此另设开关。
 
-### 3. 构建支付参数（下单）
+### 2. 构建支付参数（下单）
 
 服务端**不发起支付请求**——它只负责拼参数、算签名，然后交给小程序端，由
 `wx.requestVirtualPayment` 拉起支付。
