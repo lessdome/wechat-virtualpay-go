@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 )
@@ -332,23 +331,38 @@ type IOSRefundQueryNotify struct {
 	PayOrderID string `json:"pay_order_id"`
 }
 
-// Parse 解析一次推送：验签（必要时解密）→ 识别事件 → 反序列化为对应结构。
+// ParseNotification 解析一次推送：读请求体 → 验签（必要时解密）→ 识别事件 → 反序列化。
 //
-// 参数：
-//   - query：URL 上的查询参数（含 signature / timestamp / nonce，安全模式还有
-//     msg_signature 与 encrypt_type）
-//   - body：原始请求体
+// 这是接收推送的**唯一入口**，把 HTTP 请求交给它即可。明文模式与安全模式由 URL 上的
+// encrypt_type=aes 自动区分，不需要调用方指定。
 //
-// 任何一步不过都返回错误——调用方应当把错误直接回给微信（不返回成功应答），
-// 微信会重试；**绝不要在验签失败时仍然发货**。
-func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
+// 任何一步不过都返回错误——调用方应当把错误直接回给微信（回失败应答让它重试），
+// **绝不要在验签失败时仍然发货**。
+//
+// 典型用法：
+//
+//	notif, err := notifier.ParseNotification(r)
+//	if err != nil {
+//		// 回一个失败应答，让微信重试；不要发货
+//	}
+//	switch notif.Event {
+//	case wechat_virtualpay_go.EventGoodsDeliver:
+//		// 幂等发货…
+//	}
+//	body, ct := wechat_virtualpay_go.Ack()
+func (n *Notifier) ParseNotification(r *http.Request) (*Notification, error) {
+	body, err := readAllLimited(r)
+	if err != nil {
+		return nil, err
+	}
+	query := r.URL.Query()
+
 	if len(bytes.TrimSpace(body)) == 0 {
 		return nil, errors.New("wechat_virtualpay_go: 推送请求体为空")
 	}
 
 	timestamp := query.Get("timestamp")
 	nonce := query.Get("nonce")
-
 	if timestamp == "" || nonce == "" {
 		return nil, errors.New("wechat_virtualpay_go: 推送请求缺少 timestamp 或 nonce")
 	}
@@ -386,51 +400,7 @@ func (n *Notifier) Parse(query url.Values, body []byte) (*Notification, error) {
 		}
 	}
 
-	return parseNotification(plain)
-}
-
-// ParseHTTP 是 Parse 的便捷封装，直接从 *http.Request 取值。
-//
-// 典型用法：
-//
-//	notif, err := notifier.ParseHTTP(r)
-//	if err != nil {
-//		// 回一个失败应答，让微信重试；不要发货
-//	}
-//	switch notif.Event {
-//	case wechat_virtualpay_go.EventGoodsDeliver:
-//		// 幂等发货…
-//	}
-//	body, ct := wechat_virtualpay_go.Ack()
-func (n *Notifier) ParseHTTP(r *http.Request) (*Notification, error) {
-	body, err := readAllLimited(r)
-	if err != nil {
-		return nil, err
-	}
-	return n.Parse(r.URL.Query(), body)
-}
-
-// maxNotifyBodySize 限制推送请求体大小，防止超大报文打爆内存。
-const maxNotifyBodySize = 1 << 20 // 1 MiB
-
-func readAllLimited(r *http.Request) ([]byte, error) {
-	if r.Body == nil {
-		return nil, errors.New("wechat_virtualpay_go: 推送请求没有 body")
-	}
-	defer r.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxNotifyBodySize+1))
-	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 读取推送请求体失败: %w", err)
-	}
-	if len(body) > maxNotifyBodySize {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 推送请求体超过 %d 字节上限", maxNotifyBodySize)
-	}
-	return body, nil
-}
-
-// parseNotification 识别事件类型并填充对应结构。
-func parseNotification(plain []byte) (*Notification, error) {
+	// 以下：识别事件类型并反序列化到对应结构。
 	var header struct {
 		Event string `json:"Event"`
 	}
@@ -488,6 +458,25 @@ func parseNotification(plain []byte) (*Notification, error) {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
+}
+
+// maxNotifyBodySize 限制推送请求体大小，防止超大报文打爆内存。
+const maxNotifyBodySize = 1 << 20 // 1 MiB
+
+func readAllLimited(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, errors.New("wechat_virtualpay_go: 推送请求没有 body")
+	}
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxNotifyBodySize+1))
+	if err != nil {
+		return nil, fmt.Errorf("wechat_virtualpay_go: 读取推送请求体失败: %w", err)
+	}
+	if len(body) > maxNotifyBodySize {
+		return nil, fmt.Errorf("wechat_virtualpay_go: 推送请求体超过 %d 字节上限", maxNotifyBodySize)
+	}
+	return body, nil
 }
 
 // isIOSRefundQueryPayload 判断一段推送明文是不是 iOS 退款问询。

@@ -260,7 +260,7 @@ bal, err := client.QueryUserBalance(ctx, sessionKey, wechat_virtualpay_go.QueryU
 | 微信支付风控事件通知 | `xpay_wxpay_callback_notify` | `WxpayCallbackNotify` |
 | iOS 退款问询推送 | `xpay_subscribe_ios_refund_query_notify` | `IOSRefundQueryNotify` |
 
-`Parse` 返回的 `Notification` 上，只有与 `Event` 对应的那个字段非 nil。
+`ParseNotification` 返回的 `Notification` 上，只有与 `Event` 对应的那个字段非 nil。
 
 ### 处理示例
 
@@ -275,7 +275,7 @@ if err != nil {
 }
 
 // 在你的 HTTP handler 里：
-notif, err := notifier.ParseHTTP(r)
+notif, err := notifier.ParseNotification(r)
 if err != nil {
     // 验签/解密失败：回失败应答让微信重试，**绝不要发货**
     body, ct := wechat_virtualpay_go.AckError(1, err.Error())
