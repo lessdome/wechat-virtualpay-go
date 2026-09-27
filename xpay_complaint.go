@@ -131,7 +131,8 @@ type GetComplaintListRequest struct {
 	Offset int `json:"offset"`
 	// Limit 最多返回条数。
 	Limit int `json:"limit"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // GetComplaintListResponse 是获取投诉列表的响应。
@@ -157,7 +158,8 @@ func (c *Client) GetComplaintList(ctx context.Context, req GetComplaintListReque
 type GetComplaintDetailRequest struct {
 	// ComplaintID 投诉 ID，由 GetComplaintList 返回。
 	ComplaintID string `json:"complaint_id"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // GetComplaintDetailResponse 是获取投诉详情的响应。
@@ -227,7 +229,8 @@ type GetNegotiationHistoryRequest struct {
 	Offset int `json:"offset"`
 	// Limit 最多返回条数。
 	Limit int `json:"limit"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // GetNegotiationHistoryResponse 是获取协商历史的响应。
@@ -257,7 +260,8 @@ type ResponseComplaintRequest struct {
 	ResponseContent string `json:"response_content"`
 	// ResponseImages 回复的图片，每一项是 UploadVPFile 返回的 file_id。
 	ResponseImages []string `json:"response_images"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // ResponseComplaint 回复用户投诉。
@@ -273,7 +277,8 @@ func (c *Client) ResponseComplaint(ctx context.Context, req ResponseComplaintReq
 type CompleteComplaintRequest struct {
 	// ComplaintID 投诉 ID。
 	ComplaintID string `json:"complaint_id"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // CompleteComplaint 完成投诉处理（即「申请结单」）。
@@ -293,7 +298,8 @@ type UploadVPFileRequest struct {
 	ImgURL string `json:"img_url,omitempty"`
 	// FileName 图片名称。
 	FileName string `json:"file_name"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // UploadVPFileResponse 是上传媒体文件的响应。
@@ -322,7 +328,8 @@ type GetUploadFileSignRequest struct {
 	ConvertCOS bool `json:"convert_cos"`
 	// ComplaintID 对应的投诉 ID。
 	ComplaintID string `json:"complaint_id"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // GetUploadFileSignResponse 是获取签名头部的响应。

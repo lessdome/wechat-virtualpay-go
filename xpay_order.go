@@ -90,7 +90,8 @@ type QueryOrderRequest struct {
 	OrderID string `json:"order_id,omitempty"`
 	// WxOrderID 微信内部单号，与 OrderID 二选一。
 	WxOrderID string `json:"wx_order_id,omitempty"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 type queryOrderResponse struct {
@@ -156,7 +157,8 @@ type RefundOrderRequest struct {
 	RefundReason RefundReason `json:"refund_reason"`
 	// RefundFrom 退款来源。
 	RefundFrom RefundFrom `json:"req_from"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // RefundOrderResponse 是发起退款的响应。
@@ -197,7 +199,8 @@ type NotifyProvideGoodsRequest struct {
 	OrderID string `json:"order_id,omitempty"`
 	// WxOrderID 微信内部单号，与 OrderID 二选一。
 	WxOrderID string `json:"wx_order_id,omitempty"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // NotifyProvideGoods 通知微信「已发货完成」，仅用于现金单。
@@ -262,7 +265,8 @@ type StartDownloadOrderRequest struct {
 	RefundStatus RefundStatusFilter `json:"refund_status,omitempty"`
 	// PayChannel 支付渠道。
 	PayChannel PayChannel `json:"pay_channel"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // StartDownloadOrderResponse 是发起下载任务的响应。
@@ -298,7 +302,8 @@ const (
 type QueryDownloadOrderRequest struct {
 	// TaskID 由 StartDownloadOrder 返回的下载任务 ID。
 	TaskID string `json:"task_id"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryDownloadOrderResponse 是查询下载任务的响应。

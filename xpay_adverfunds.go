@@ -46,7 +46,8 @@ type TransferAccount struct {
 
 // QueryTransferAccountRequest 是查询广告金充值账户的请求。
 type QueryTransferAccountRequest struct {
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryTransferAccountResponse 是查询广告金充值账户的响应。
@@ -93,7 +94,8 @@ type QueryAdverFundsRequest struct {
 	PageSize int `json:"page_size,omitempty"`
 	// Filter 查询过滤条件。
 	Filter *AdFundFilter `json:"filter,omitempty"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // AdverFund 是一条广告金发放记录。
@@ -149,7 +151,8 @@ type CreateFundsBillRequest struct {
 	AuthorizeAdvertise int `json:"authorize_advertise"`
 	// FundType 广告金发放原因。
 	FundType AdFundType `json:"fund_type"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // CreateFundsBillResponse 是充值广告金的响应。
@@ -177,7 +180,8 @@ type BindTransferAccountRequest struct {
 	TransferAccountUID int64 `json:"transfer_account_uid,omitempty"`
 	// TransferAccountOrgName 充值账户主体名称。
 	TransferAccountOrgName string `json:"transfer_account_org_name,omitempty"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // BindTransferAccount 绑定广告金充值账户。
@@ -217,7 +221,8 @@ type QueryFundsBillRequest struct {
 	PageSize int `json:"page_size"`
 	// Filter 查询过滤条件。
 	Filter FundsBillFilter `json:"filter"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // FundsBill 是一条广告金充值记录。
@@ -272,7 +277,8 @@ type QueryRecoverBillRequest struct {
 	PageSize int `json:"page_size"`
 	// Filter 查询过滤条件。
 	Filter RecoverBillFilter `json:"filter"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // RecoverBill 是一条广告金回收记录。
@@ -311,7 +317,8 @@ func (c *Client) QueryRecoverBill(ctx context.Context, req QueryRecoverBillReque
 type DownloadAdverFundsOrderRequest struct {
 	// FundID 广告金发放 ID。
 	FundID string `json:"fund_id"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // DownloadAdverFundsOrderResponse 是下载广告金对应商户订单信息的响应。

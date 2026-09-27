@@ -16,7 +16,8 @@ type CreateWithdrawOrderRequest struct {
 	//
 	// 留空表示全额提现。
 	WithdrawAmount string `json:"withdraw_amount,omitempty"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // CreateWithdrawOrderResponse 是创建提现单的响应。
@@ -53,7 +54,8 @@ const (
 type QueryWithdrawOrderRequest struct {
 	// WithdrawNo 提现单单号。
 	WithdrawNo string `json:"withdraw_no"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryWithdrawOrderResponse 是查询提现单的响应。
@@ -97,7 +99,8 @@ type BizBalance struct {
 
 // QueryBizBalanceRequest 是查询商家账户可提现余额的请求。
 type QueryBizBalanceRequest struct {
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryBizBalanceResponse 是查询商家账户可提现余额的响应。

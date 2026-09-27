@@ -22,7 +22,8 @@ type UploadGoodsItem struct {
 type StartUploadGoodsRequest struct {
 	// UploadItem 上传的道具列表。一次仅支持上传一个道具，多个道具需分多次请求。
 	UploadItem []UploadGoodsItem `json:"upload_item"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // StartUploadGoods 启动批量上传道具任务。
@@ -81,7 +82,8 @@ type UploadedGoodsItem struct {
 
 // QueryUploadGoodsRequest 是查询批量上传道具任务的请求。
 type QueryUploadGoodsRequest struct {
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryUploadGoodsResponse 是查询批量上传道具任务的响应。
@@ -113,7 +115,8 @@ type PublishGoodsItem struct {
 type StartPublishGoodsRequest struct {
 	// PublishItem 发布的道具列表。一次仅支持发布一个道具，多个道具需分多次请求。
 	PublishItem []PublishGoodsItem `json:"publish_item"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // StartPublishGoods 启动批量发布道具任务（把开发环境的道具发布到现网）。
@@ -139,7 +142,8 @@ type PublishedGoodsItem struct {
 
 // QueryPublishGoodsRequest 是查询批量发布道具任务的请求。
 type QueryPublishGoodsRequest struct {
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryPublishGoodsResponse 是查询批量发布道具任务的响应。

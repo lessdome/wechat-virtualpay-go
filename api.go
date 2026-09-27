@@ -16,15 +16,6 @@ import (
 // 而非微信支付 APIv3（api.mch.weixin.qq.com）。
 const defaultAPIBase = "https://api.weixin.qq.com"
 
-// envField 是所有请求体都带的 env 字段：本包只支持现网环境，固定为 0。
-//
-// 内嵌进每个请求结构体，保证序列化时始终带上这个协议要求的字段；字段本身是导出
-// 的（Go 的内嵌提升），但没有任何理由去改它。
-type envField struct {
-	// Env 环境标识。本包只支持现网，固定为 0。
-	Env int `json:"env"`
-}
-
 // responseHeader 是所有 /xpay 接口响应的公共部分。
 //
 // 微信开放接口成功时不返回 errcode；一旦出现非 0 的 errcode 即为失败。

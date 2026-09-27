@@ -12,7 +12,8 @@ type QueryUserBalanceRequest struct {
 	OpenID string `json:"openid"`
 	// UserIP 用户 IP，形如 1.1.1.1。
 	UserIP string `json:"user_ip"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // QueryUserBalanceResponse 是查询代币余额的响应。
@@ -96,7 +97,8 @@ type CurrencyPayRequest struct {
 	PayItem string `json:"payitem,omitempty"`
 	// Remark 备注。
 	Remark string `json:"remark,omitempty"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // CurrencyPayResponse 是扣减代币的响应。
@@ -135,7 +137,8 @@ type CancelCurrencyPayRequest struct {
 	OrderID string `json:"order_id"`
 	// Amount 退款金额（代币数量）。
 	Amount int64 `json:"amount"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // CancelCurrencyPayResponse 是代币支付退款的响应。
@@ -163,7 +166,8 @@ type PresentCurrencyRequest struct {
 	OrderID string `json:"order_id"`
 	// Amount 赠送金额（代币数量）。
 	Amount int64 `json:"amount"`
-	envField
+	// Env 环境标识。本包只支持现网，固定为 0。
+	Env int `json:"env"`
 }
 
 // PresentCurrencyResponse 是代币赠送的响应。
