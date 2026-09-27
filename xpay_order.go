@@ -179,7 +179,7 @@ type RefundOrderResponse struct {
 //
 // ⚠️ 文档存疑：本接口的「注意事项」写着「使用用户态签名与支付签名」，但其 query
 // 参数表只列了 access_token 与 pay_sig（没有 signature），且该段落与其它接口的
-// 模板文字雷同。本包暂按参数表实现（只加 pay_sig）。若实测返回 -15005
+// 模板文字雷同。本包暂按参数表实现（只加 pay_sig）。若实测返回 268490003
 // （用户签名错误），把本方法改为 authUserAndPaySig 并传入 SessionKey 即可。
 //
 // 官方文档：POST /xpay/refund_order
@@ -210,7 +210,7 @@ type NotifyProvideGoodsRequest struct {
 //
 // ⚠️ 文档存疑：本接口的 query 参数表只有 access_token，没有 pay_sig。但其请求体
 // 里的 env 字段注释写着「仅作为签名校验」，两处矛盾。本包暂按参数表实现（不加
-// 签名）。若实测返回 -15006，把 authAccessTokenOnly 改为 authPaySig 即可。
+// 签名）。若实测返回 268490003，把 authAccessTokenOnly 改为 authPaySig 即可。
 //
 // 官方文档：POST /xpay/notify_provide_goods
 func (c *Client) NotifyProvideGoods(ctx context.Context, req NotifyProvideGoodsRequest) error {

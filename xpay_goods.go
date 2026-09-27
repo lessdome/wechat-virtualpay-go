@@ -123,7 +123,8 @@ type StartPublishGoodsRequest struct {
 //
 // 任务为异步：需轮询 QueryPublishGoods 查看结果。一次仅支持发布一个道具。
 //
-// 注意：道具发布后约 10 分钟才生效，生效前调用会返回 -15014。
+// 注意：道具发布后约 10 分钟才生效，生效前下单会失败（客户端侧的错误码是 -15014；
+// 服务端错误码表里没有列出对应项）。
 //
 // 官方文档：POST /xpay/start_publish_goods
 func (c *Client) StartPublishGoods(ctx context.Context, req StartPublishGoodsRequest) error {

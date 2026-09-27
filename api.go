@@ -38,7 +38,7 @@ type responseHeader struct {
 // ⚠️ 存疑：authAccessTokenOnly 那批（广告金 7 个 + notify_provide_goods +
 // present_currency）的文档自相矛盾——请求体里的 env 字段注释写着「仅作为签名
 // 校验」，但 query 参数表里并没有 pay_sig。本包暂按文档字面实现（不加签名），
-// 待在现网实测确认。若实测返回 -15006，把这些接口改回 authPaySig 即可。
+// 待在现网实测确认。若实测返回 268490003（签名错误），把这些接口改回 authPaySig 即可。
 type authMode int
 
 const (
@@ -51,7 +51,7 @@ const (
 //
 //   - uri：形如 "/xpay/query_order"，**不含** "?" 及其后的 query string。
 //     这一点是硬性要求：pay_sig 的签名原文是 uri + "&" + 请求体，
-//     uri 带上 query string 会导致签名与微信侧不一致（-15006）。
+//     uri 带上 query string 会导致签名与微信侧不一致（服务端报 268490003 签名错误）。
 //   - body：请求体，会被序列化为 JSON。
 //   - mode：鉴权级别，见 authMode。
 //   - sessionKey：仅 authUserAndPaySig 需要（用户登录态，由 code2Session 获取）。
@@ -108,9 +108,9 @@ func (c *Client) call(ctx context.Context, uri string, body any, mode authMode, 
 
 	if resp.StatusCode != http.StatusOK {
 		return &APIError{
-			Code:    resp.StatusCode,
-			Message: fmt.Sprintf("HTTP %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
-			Raw:     rawResp,
+			Message:    http.StatusText(resp.StatusCode),
+			HTTPStatus: resp.StatusCode,
+			Raw:        rawResp,
 		}
 	}
 

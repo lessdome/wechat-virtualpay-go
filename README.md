@@ -314,14 +314,21 @@ if wechat_virtualpay_go.IsCode(err, wechat_virtualpay_go.ErrCodeSessionKeyExpire
 
 常见错误码（完整列表见 `errors.go`）：
 
+⚠️ 虚拟支付有**两套错误码**，分别出自两份官方文档，别混：
+
+- **服务端接口**（本库发起的 `/xpay/*` 调用）→ `268490xxx`，也就是下表这些
+- **小程序端**（`wx.requestVirtualPayment` 的 fail 回调）→ `-150xx`，本库**不会返回**，
+  所以 `errors.go` 里没有定义；需要时查官方《wx.requestVirtualPayment》一页的「错误」表
+
 | 错误码 | 含义 | 排查方向 |
 | --- | --- | --- |
-| `-15005` | 用户签名 `signature` 错误 | `session_key` 是否最新 |
-| `-15006` | 支付签名 `pay_sig` 错误 | AppKey 与环境是否匹配、`signData` 是否字节级一致 |
-| `-15007` | `session_key` 过期 | 重新 `wx.login` + `code2Session` |
-| `-15011` | 现网版本 `env` 必须为 0 | 本包已固定为 0，若出现说明请求被改动过 |
-| `-15013` | `goodsPrice` 与后台不一致 | 道具价格是否已发布 |
-| `-15016` | `signData` 格式有问题 | 是否混入了非协议字段 |
+| `-1` | 系统错误 | 重试；持续出现联系微信 |
+| `268490002` | 请求参数字段错误 | 具体看 `errmsg` |
+| `268490003` | 签名错误 | AppKey 是否正确、`signData` 是否与请求体字节级一致 |
+| `268490004` | 重复操作（表示之前那次已经成功）| 通常可直接当作成功处理 |
+| `268490009` | `session_key` 不存在或已过期 | 让前端重新 `wx.login` + `code2Session` |
+| `268490015` | 频率限制 | 降低调用频率后重试 |
+| `268490016` | 退款的 `left_fee` 与实际不符 | 先用 `QueryOrder` 查 `order.left_fee` |
 
 ## 容易踩的坑
 

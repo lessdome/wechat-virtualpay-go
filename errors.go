@@ -5,71 +5,103 @@ import (
 	"fmt"
 )
 
-// APIError 表示微信接口返回的业务错误。
+// APIError 表示一次调用失败。
 //
-// 微信开放接口的成功响应里没有 errcode 字段；一旦出现非 0 的 errcode，
-// 即表示失败，本包会将其转换为 *APIError 返回。
+// 两种失败来源，用字段区分开：
+//   - 微信返回了业务错误码 → Code 非 0，HTTPStatus 为 0
+//   - HTTP 层就失败了（如 500、502）→ HTTPStatus 非 0，Code 为 0
+//
+// 分开是因为两者是**不同的命名空间**：微信的业务码是 268490xxx，而 HTTP 状态码
+// 是 500 之类，混在一个字段里会让 IsCode 误命中。
 type APIError struct {
-	Code    int    // 微信 errcode
-	Message string // 微信 errmsg
-	Raw     []byte // 原始响应体，便于排查
+	// Code 微信业务错误码。为 0 表示这不是业务错误（见 HTTPStatus）。
+	Code int
+	// Message 微信返回的 errmsg；HTTP 层失败时是状态描述。
+	Message string
+	// HTTPStatus HTTP 状态码。为 0 表示这不是 HTTP 层失败。
+	HTTPStatus int
+	// Raw 原始响应体，便于排查。
+	Raw []byte
 }
 
 // Error 实现 error 接口。
 func (e *APIError) Error() string {
+	if e.HTTPStatus != 0 {
+		return fmt.Sprintf("wechat_virtualpay_go: HTTP %d %s", e.HTTPStatus, e.Message)
+	}
 	return fmt.Sprintf("wechat_virtualpay_go: 微信接口错误 errcode=%d errmsg=%s", e.Code, e.Message)
 }
 
-// Hint 针对高频错误码给出排查提示，便于直接打日志或返回给调用方。
+// Hint 针对高频错误码给出排查方向，便于直接打日志。
+//
+// 只覆盖接入阶段最容易遇到的几个；其余返回空串。
 func (e *APIError) Hint() string {
 	switch e.Code {
-	case ErrCodeSignatureUser:
-		return "用户签名（signature）错误：检查 session_key 是否最新；session_key 由 code2Session 获取，会过期"
-	case ErrCodeSignaturePay:
-		return "支付签名（pay_sig）错误：检查 AppKey 与环境是否匹配、签名算法是否为 HMAC-SHA256(appKey, method+\"&\"+signData)、以及 signData 是否与发送的字符串字节级一致"
+	case ErrCodeSignature:
+		return "签名错误：检查 AppKey 是否正确、签名算法是否为 HMAC-SHA256(appKey, uri+\"&\"+请求体)、以及参与签名的字符串是否与真正发出的请求体字节级一致（最常见的失配来源）"
 	case ErrCodeSessionKeyExpired:
-		return "session_key 已过期：重新调用 wx.login 并 code2Session 刷新登录态"
-	case ErrCodeEnvMismatch:
-		return "环境不匹配：现网版本请求体的 env 必须为 0"
-	case ErrCodeOutTradeNoDuplicate:
-		return "订单号重复：outTradeNo 每个订单只能使用一次"
-	case ErrCodeGoodsPriceMismatch:
-		return "道具价格错误：goodsPrice 必须与后台配置的道具价格一致"
-	case ErrCodeProductNotPublished:
-		return "道具未发布：productId 对应的道具尚未在虚拟支付后台发布"
-	case ErrCodeMerchantRestricted:
-		return "商户涉嫌违规，收款功能已被限制"
-	default:
-		return ""
+		return "session_key 已过期：让前端重新 wx.login，再用 code 换新的 session_key"
+	case ErrCodeInvalidParam:
+		return "请求参数字段错误：具体看 errmsg，常见是必填项缺失或字段格式不符"
+	case ErrCodeInvalidOpenID:
+		return "openid 错误：确认 openid 属于当前 AppID，且与下单时用的是同一个"
+	case ErrCodeDuplicateOperation:
+		return "重复操作：微信表示之前的同一次操作已经成功，通常可直接当作成功处理（例如赠送、代币支付、广告金充值）"
+	case ErrCodeCoinNotPublished:
+		return "代币未发布：先在虚拟支付后台发布代币"
+	case ErrCodeLeftFeeMismatch:
+		return "退款金额与剩余可退不符：先用 QueryOrder 查 order.left_fee，再按它填 RefundFee"
+	case ErrCodeRefundInProgress:
+		return "退款进行中：稍后用相同参数重试即可"
+	case ErrCodeRateLimited:
+		return "触发频率限制：降低调用频率后重试"
 	}
+	return ""
 }
 
-// 常见错误码（命名以便业务侧 switch / errors.Is）。
+// 微信虚拟支付涉及**两套不同的错误码**，分别出自两份官方文档，不要混用：
 //
-// 完整列表以官方文档为准，这里收录了接入阶段最容易遇到的若干。
+//	服务端接口（/xpay/*）  → 本库发起的调用，返回 268490xxx（外加 -1），即下面这些
+//	小程序端拉起支付        → wx.requestVirtualPayment 的 fail 回调，返回 -150xx
+//
+// 后者由前端拿到，本库不返回也不定义常量（需要时见官方《wx.requestVirtualPayment》
+// 一页的「错误」表）；但排查支付问题时两边常要对照，所以在此记一笔。
+
+// 服务端接口（/xpay/*）返回的业务错误码。
+// 取自 33 个接口页各自的「错误码」表。
 const (
-	ErrCodeParamError          = -15001 // 参数错误
-	ErrCodeOutTradeNoDuplicate = -15002 // outTradeNo 重复使用
-	ErrCodeSystemError         = -15003 // 系统错误
-	ErrCodeCurrencyType        = -15004 // currencyType 错误（目前只支持 CNY）
-	ErrCodeSignatureUser       = -15005 // 用户态签名 signature 错误
-	ErrCodeSignaturePay        = -15006 // 支付签名 pay_sig 错误
-	ErrCodeSessionKeyExpired   = -15007 // session_key 过期
-	ErrCodeSubMerchantInvalid  = -15008 // 二级商户进件未完成
-	ErrCodeCoinNotPublished    = -15009 // 代币未发布
-	ErrCodeProductNotPublished = -15010 // 道具 productId 未发布
-	ErrCodeEnvMismatch         = -15011 // 现网版本 env 只能为 0
-	ErrCodeMidasFailed         = -15012 // 调用米大师失败导致关单
-	ErrCodeGoodsPriceMismatch  = -15013 // goodsPrice 道具价格错误
-	ErrCodePublishNotEffective = -15014 // 道具/代币发布未生效（约 10 分钟后生效）
-	ErrCodeSignDataFormat      = -15016 // signData 格式有问题
-	ErrCodeMerchantRestricted  = -15017 // 商家涉嫌违规，收款功能被限制
+	// ErrCodeSystemError 系统错误。
+	ErrCodeSystemError = -1
+
+	ErrCodeInvalidOpenID        = 268490001 // openid 错误
+	ErrCodeInvalidParam         = 268490002 // 请求参数字段错误，具体看 errmsg
+	ErrCodeSignature            = 268490003 // 签名错误
+	ErrCodeDuplicateOperation   = 268490004 // 重复操作（赠送、代币支付、充值广告金相关接口会返回，表示之前的操作已经成功）
+	ErrCodeOrderAlreadyRefunded = 268490005 // 订单已经通过 cancel_currency_pay 接口退款，不支持再退款
+	ErrCodeAmountInsufficient   = 268490006 // 代币的退款/支付操作金额不足
+	ErrCodeSensitiveContent     = 268490007 // 图片或文字存在敏感内容，禁止使用
+	ErrCodeCoinNotPublished     = 268490008 // 代币未发布，不允许进行代币操作
+	ErrCodeSessionKeyExpired    = 268490009 // 用户 session_key 不存在或已过期，请重新登录
+	ErrCodeDataGenerating       = 268490011 // 数据生成中，请稍后调用本接口获取
+	ErrCodeBatchTaskRunning     = 268490012 // 批量任务运行中，请等待完成后才能再次运行
+	ErrCodeRefundNotAllowed     = 268490013 // 禁止对核销状态的单进行退款
+	ErrCodeRefundInProgress     = 268490014 // 退款操作进行中，稍后可以使用相同参数重试
+	ErrCodeRateLimited          = 268490015 // 频率限制
+	ErrCodeLeftFeeMismatch      = 268490016 // 退款的 left_fee 字段与实际不符，请通过 query_order 接口查询确认
+
+	ErrCodeAdFundIndustryMismatch = 268490018 // 广告金充值帐户行业 id 不匹配
+	ErrCodeAdFundAccountBound     = 268490019 // 广告金充值帐户 id 已绑定其他 appid
+	ErrCodeAdFundNameMismatch     = 268490020 // 广告金充值帐户主体名称错误
+	ErrCodeAccountNotOnboarded    = 268490021 // 账户未完成进件
+	ErrCodeAdFundAccountInvalid   = 268490022 // 广告金充值账户无效
+	ErrCodeAdFundInsufficient     = 268490023 // 广告金余额不足
+	ErrCodeAdFundAmountInvalid    = 268490024 // 广告金充值金额必须大于 0
 )
 
 // ErrInvalidSignature 表示回调验签失败。
 var ErrInvalidSignature = errors.New("wechat_virtualpay_go: 回调验签失败")
 
-// IsCode 判断 err 是否为指定的微信错误码。
+// IsCode 判断 err 是否为指定的微信业务错误码。
 func IsCode(err error, code int) bool {
 	var ae *APIError
 	if errors.As(err, &ae) {

@@ -107,9 +107,9 @@ func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, e
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", 0, &APIError{
-			Code:    resp.StatusCode,
-			Message: fmt.Sprintf("HTTP %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
-			Raw:     raw,
+			Message:    http.StatusText(resp.StatusCode),
+			HTTPStatus: resp.StatusCode,
+			Raw:        raw,
 		}
 	}
 

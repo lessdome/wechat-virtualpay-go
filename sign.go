@@ -42,7 +42,7 @@ func CalcPaySig(appKey, method, signData string) string {
 // CalcSignature 计算用户签名 signature。
 //
 // 与 pay_sig 不同，signature 不带 method 前缀，直接用 sessionKey 对 signData 签名。
-// sessionKey 由 wx.login 的 code 通过 code2Session 换取，会过期（对应错误码 -15007）。
+// sessionKey 由 wx.login 的 code 通过 code2Session 换取，会过期（服务端报 268490009）。
 func CalcSignature(sessionKey, signData string) string {
 	return hmacSHA256Hex(sessionKey, signData)
 }
