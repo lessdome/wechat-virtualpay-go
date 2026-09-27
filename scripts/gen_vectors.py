@@ -41,10 +41,6 @@ def signature(session_key: str, sign_data: str) -> str:
     return sig(session_key, sign_data)
 
 
-def pay_event_sig(app_key: str, event: str, payload: str) -> str:
-    return sig(app_key, event + "&" + payload)
-
-
 CASES = {
     "pay_sig / 普通参数": pay_sig(
         APP_KEY,
@@ -90,11 +86,6 @@ CASES = {
     "官方样例 / signature": signature(
         OFFICIAL_SESSION_KEY,
         OFFICIAL_POST_BODY,
-    ),
-    "pay_event_sig": pay_event_sig(
-        APP_KEY,
-        "xpay_goods_deliver_notify",
-        '{"outTradeNo":"ORDER20260101001","productId":"prod_001"}',
     ),
 }
 

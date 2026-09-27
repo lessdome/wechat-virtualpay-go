@@ -105,30 +105,3 @@ func TestSignatureDiffersFromPaySig(t *testing.T) {
 		t.Fatal("pay_sig 与 signature 不应相同（两者算法不同）")
 	}
 }
-
-func TestCalcPayEventSigAndVerify(t *testing.T) {
-	const (
-		appKey  = "test_app_key_1234567890"
-		event   = "xpay_goods_deliver_notify"
-		payload = `{"outTradeNo":"ORDER20260101001","productId":"prod_001"}`
-		want    = "fda68ccc3f2ac30a11aee40584ea021e1999026fbbb432875070ef1ce46074f0"
-	)
-
-	sig := CalcPayEventSig(appKey, event, payload)
-	if sig != want {
-		t.Fatalf("CalcPayEventSig() = %s\nwant               = %s", sig, want)
-	}
-
-	if !VerifyPayEventSig(appKey, event, payload, sig) {
-		t.Fatal("正确签名应校验通过")
-	}
-	if VerifyPayEventSig(appKey, event, payload, "deadbeef") {
-		t.Fatal("错误签名不应校验通过")
-	}
-	if VerifyPayEventSig(appKey, event, payload+" ", sig) {
-		t.Fatal("payload 被篡改后不应校验通过")
-	}
-	if VerifyPayEventSig("wrong_key", event, payload, sig) {
-		t.Fatal("appKey 不同时不应校验通过")
-	}
-}

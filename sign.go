@@ -6,14 +6,17 @@ import (
 	"encoding/hex"
 )
 
-// 虚拟支付的三个签名，算法都是 HMAC-SHA256，输出小写十六进制（64 字符）。
+// 虚拟支付涉及**两个** HMAC-SHA256 签名，输出小写十六进制（64 字符）。
 //
-//	pay_sig       = hex( HMAC-SHA256( AppKey,     method + "&" + signData ) )
-//	signature     = hex( HMAC-SHA256( sessionKey, signData ) )
-//	pay_event_sig = hex( HMAC-SHA256( AppKey,     event  + "&" + payload  ) )
+//	pay_sig   = hex( HMAC-SHA256( AppKey,     uri + "&" + signData ) )
+//	signature = hex( HMAC-SHA256( sessionKey, signData ) )
 //
-// 注意 pay_sig 与 signature 的差异：pay_sig 会拼上 method，signature 不会。
+// 注意 pay_sig 与 signature 的差异：pay_sig 会拼上 uri，signature 不会。
 // 这是最容易写错的地方——两者必须分别实现，不能共用一个函数。
+//
+// ⚠️ 消息推送的验签**不是** HMAC，也不使用 AppKey，见 notify.go。
+// （早期版本这里曾有一个 pay_event_sig = HMAC(appKey, event+"&"+payload)，
+// 该算法在微信官方文档中并不存在，是把"两套签名"误推成了三套，已删除。）
 
 // hmacSHA256Hex 计算 HMAC-SHA256 并返回小写十六进制字符串。
 func hmacSHA256Hex(key, message string) string {
@@ -42,20 +45,4 @@ func CalcPaySig(appKey, method, signData string) string {
 // sessionKey 由 wx.login 的 code 通过 code2Session 换取，会过期（对应错误码 -15007）。
 func CalcSignature(sessionKey, signData string) string {
 	return hmacSHA256Hex(sessionKey, signData)
-}
-
-// CalcPayEventSig 计算回调事件签名 pay_event_sig。
-//
-//   - event:   事件类型，如 "xpay_goods_deliver_notify"
-//   - payload: 推送数据原文
-func CalcPayEventSig(appKey, event, payload string) string {
-	return hmacSHA256Hex(appKey, event+"&"+payload)
-}
-
-// VerifyPayEventSig 校验回调事件签名。
-//
-// 使用 hmac.Equal 做恒定时间比较，避免时序侧信道。
-func VerifyPayEventSig(appKey, event, payload, signature string) bool {
-	expected := CalcPayEventSig(appKey, event, payload)
-	return hmac.Equal([]byte(expected), []byte(signature))
 }
