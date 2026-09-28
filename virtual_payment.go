@@ -1,6 +1,7 @@
 package wechat_virtualpay_go
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -8,11 +9,10 @@ import (
 
 // 本文件实现「道具直购」的下单参数生成。
 //
-// 服务端在这条链路上**不发起任何请求**：只把参数拼成一个字符串、算两个签名，交给
-// 小程序端由 wx.requestVirtualPayment 拉起支付（官方 2.1 时序图）。
-//
-// signData 的字段与必填性取自《wx.requestVirtualPayment》一页的 signData 结构表；
-// 字段顺序与官方示例一致，便于逐个对照。
+// 官方 2.1 时序图里这条流程是：服务端把参数拼成一个字符串、算两个签名，交给小程序端
+// 由 wx.requestVirtualPayment 拉起支付。其中用户态签名要用 session_key，而 session_key
+// 只能由 wx.login 的 code 换来——**这一步本函数替开发者做了**，所以调用方只需要把
+// 前端拿到的 code 传进来。
 
 // payMethodRequestVirtualPayment 是拉起支付时固定的签名 uri。
 //
@@ -61,15 +61,11 @@ type GoodsPaymentRequest struct {
 	OutTradeNo string
 	// Attach 透传数据（signData 的 attach）。必填，发货通知会原样带回。
 	Attach string
-	// SessionKey 用户登录态，用它算 signature。必填。
+	// Code 前端 wx.login() 得到的登录凭证。必填。
 	//
-	// 它由本包的 Code2Session 用 wx.login 的 code 换来（code 只有五分钟有效）：
-	//
-	//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
-	//	// 然后把 sess.SessionKey 填进来
-	//
-	// 注意它是**会话级**凭据，不是每单一个——同一用户的一次登录态可以用于多笔下单。
-	SessionKey string
+	// 它只有**五分钟有效、且只能用一次**，所以要现拿现用；本函数内部会用它
+	// 调 Code2Session 换出 session_key 来算用户态签名，开发者不必自己换。
+	Code string
 }
 
 // goodsSignData 是道具直购的 signData 结构。
@@ -92,34 +88,33 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 
 // BuildGoodsPayment 生成道具直购的下单参数。
 //
-// 它**不发起任何网络请求**——session_key 要先用 Code2Session 换好再传进来：
+// 调用方只需要准备**前端 wx.login 拿到的 code**——本函数内部调 Code2Session 换出
+// session_key，再用它算用户态签名，最后连同支付签名一起返回：
 //
-//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
-//	if err != nil {
-//		return err
-//	}
-//	p, err := wechat_virtualpay_go.BuildGoodsPayment(offerID, appKey,
+//	p, err := wechat_virtualpay_go.BuildGoodsPayment(ctx, appID, appSecret, offerID, appKey,
 //		wechat_virtualpay_go.GoodsPaymentRequest{
 //			ProductID:  "prod_001",
 //			GoodsPrice: 100, // 单位：分
 //			OutTradeNo: "ORDER20260101001",
 //			Attach:     "自定义透传数据",
-//			SessionKey: sess.SessionKey,
+//			Code:       loginCode, // 前端 wx.login() 拿到的
 //		})
 //
-// 返回的 SignData 交给前端，连同 PaySig / Signature / Mode 一起传给
-// wx.requestVirtualPayment——SignData 必须原样传，前端不得重新序列化。
+// 返回后把 p.SignData / p.PaySig / p.Signature / p.Mode 交给前端，
+// 传给 wx.requestVirtualPayment。**SignData 必须原样传**，前端不得重新序列化。
 //
 // 注意客户端有个前提：wx.requestVirtualPayment 需要基础库 >= 2.19.2。
-func BuildGoodsPayment(offerID, appKey string, req GoodsPaymentRequest) (*VirtualPaymentParams, error) {
+func BuildGoodsPayment(ctx context.Context, appID, appSecret, offerID, appKey string, req GoodsPaymentRequest) (*VirtualPaymentParams, error) {
+	// 先把本地能验的都验掉，再动网络——code 只能用一次，别为了一条明显不合法
+	// 的请求把它烧掉。
 	if offerID == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: offerID 不能为空")
 	}
 	if appKey == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: appKey 不能为空")
 	}
-	if req.SessionKey == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: SessionKey 不能为空（需先 code2Session 换登录态）")
+	if req.Code == "" {
+		return nil, fmt.Errorf("wechat_virtualpay_go: Code 不能为空（前端 wx.login 拿到的登录凭证）")
 	}
 	if req.ProductID == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供 ProductID")
@@ -128,6 +123,12 @@ func BuildGoodsPayment(offerID, appKey string, req GoodsPaymentRequest) (*Virtua
 		return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供正数 GoodsPrice（单位：分）")
 	}
 	if err := checkOutTradeNo(req.OutTradeNo); err != nil {
+		return nil, err
+	}
+
+	// 换登录态。用 code 换 session_key，用它算用户态签名。
+	sess, err := Code2Session(ctx, appID, appSecret, req.Code)
+	if err != nil {
 		return nil, err
 	}
 
@@ -151,7 +152,7 @@ func BuildGoodsPayment(offerID, appKey string, req GoodsPaymentRequest) (*Virtua
 		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化下单参数失败: %w", err)
 	}
 
-	return finishPayment(appKey, req.SessionKey, ModeShortSeriesGoods, string(raw)), nil
+	return finishPayment(appKey, sess.SessionKey, ModeShortSeriesGoods, string(raw)), nil
 }
 
 // finishPayment 把已经序列化好的 signData 补成完整参数：算两个签名、填 Mode。
