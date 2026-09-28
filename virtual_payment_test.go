@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -202,4 +203,32 @@ func TestGoodsValidationFailsBeforeNetwork(t *testing.T) {
 			}
 		})
 	}
+}
+
+// 生成的订单号必须过本包自己的校验，且长度固定、不重复。
+func TestNewOutTradeNo(t *testing.T) {
+	seen := make(map[string]bool, 2000)
+	prefix := time.Now().Format("20060102")
+
+	for i := 0; i < 2000; i++ {
+		v, err := NewOutTradeNo()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := checkOutTradeNo(v); err != nil {
+			t.Fatalf("生成的单号没通过校验: %v（%s）", err, v)
+		}
+		if len(v) != 30 {
+			t.Fatalf("长度应为 30，实际 %d：%s", len(v), v)
+		}
+		if !strings.HasPrefix(v, prefix) {
+			t.Fatalf("时间前缀不对：%s", v)
+		}
+		if seen[v] {
+			t.Fatalf("2000 次里出现重复：%s", v)
+		}
+		seen[v] = true
+	}
+	one, _ := NewOutTradeNo()
+	t.Logf("样例: %s（长度 %d）", one, len(one))
 }

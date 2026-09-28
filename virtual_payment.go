@@ -2,9 +2,12 @@ package wechat_virtualpay_go
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"time"
 )
 
 // 本文件实现「道具直购」的下单参数生成。
@@ -179,4 +182,23 @@ func checkOutTradeNo(v string) error {
 		return fmt.Errorf("wechat_virtualpay_go: OutTradeNo 不能以下划线开头")
 	}
 	return nil
+}
+
+// NewOutTradeNo 生成一个符合微信规范的业务订单号。
+//
+// 规则取自官方（signData 的 outTradeNo 一栏）：8–32 字符；只能由数字、大小写字母、
+// 符号 _-|*@ 组成；不能以下划线开头；**每个订单号只能用一次**。
+//
+// 格式是「14 位时间戳 + 16 位十六进制随机数」，共 30 字符：时间前缀让单号大致可按时间
+// 排序、便于排查，后 16 位（64 位熵）保证同一秒内也不会撞号。
+//
+// 另外那句官方备注要留意：outTradeNo 重复会失败，但括号里写着「极端情况不保证唯一，
+// 不建议业务强依赖唯一性」——所以不要指望「用重复单号一定会被拒」来防重，该做的幂等
+// 还是要做。
+func NewOutTradeNo() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("wechat_virtualpay_go: 生成订单号失败: %w", err)
+	}
+	return time.Now().Format("20060102150405") + hex.EncodeToString(b[:]), nil
 }
