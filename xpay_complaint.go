@@ -148,7 +148,7 @@ type GetComplaintListResponse struct {
 // 官方文档：POST /xpay/get_complaint_list
 func (c *Client) GetComplaintList(ctx context.Context, req GetComplaintListRequest) (*GetComplaintListResponse, error) {
 	var resp GetComplaintListResponse
-	if err := c.call(ctx, "/xpay/get_complaint_list", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/get_complaint_list", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -173,7 +173,7 @@ type GetComplaintDetailResponse struct {
 // 官方文档：POST /xpay/get_complaint_detail
 func (c *Client) GetComplaintDetail(ctx context.Context, req GetComplaintDetailRequest) (*GetComplaintDetailResponse, error) {
 	var resp GetComplaintDetailResponse
-	if err := c.call(ctx, "/xpay/get_complaint_detail", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/get_complaint_detail", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -246,7 +246,7 @@ type GetNegotiationHistoryResponse struct {
 // 官方文档：POST /xpay/get_negotiation_history
 func (c *Client) GetNegotiationHistory(ctx context.Context, req GetNegotiationHistoryRequest) (*GetNegotiationHistoryResponse, error) {
 	var resp GetNegotiationHistoryResponse
-	if err := c.call(ctx, "/xpay/get_negotiation_history", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/get_negotiation_history", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -270,7 +270,7 @@ type ResponseComplaintRequest struct {
 //
 // 官方文档：POST /xpay/response_complaint
 func (c *Client) ResponseComplaint(ctx context.Context, req ResponseComplaintRequest) error {
-	return c.call(ctx, "/xpay/response_complaint", req, authPaySig, "", nil)
+	return c.callPaySig(ctx, "/xpay/response_complaint", req, nil)
 }
 
 // CompleteComplaintRequest 是完成投诉处理的请求。
@@ -285,7 +285,7 @@ type CompleteComplaintRequest struct {
 //
 // 官方文档：POST /xpay/complete_complaint
 func (c *Client) CompleteComplaint(ctx context.Context, req CompleteComplaintRequest) error {
-	return c.call(ctx, "/xpay/complete_complaint", req, authPaySig, "", nil)
+	return c.callPaySig(ctx, "/xpay/complete_complaint", req, nil)
 }
 
 // UploadVPFileRequest 是上传媒体文件的请求。
@@ -313,7 +313,7 @@ type UploadVPFileResponse struct {
 // 官方文档：POST /xpay/upload_vp_file
 func (c *Client) UploadVPFile(ctx context.Context, req UploadVPFileRequest) (*UploadVPFileResponse, error) {
 	var resp UploadVPFileResponse
-	if err := c.call(ctx, "/xpay/upload_vp_file", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/upload_vp_file", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -352,7 +352,7 @@ type GetUploadFileSignResponse struct {
 // 官方文档：POST /xpay/get_upload_file_sign
 func (c *Client) GetUploadFileSign(ctx context.Context, req GetUploadFileSignRequest) (*GetUploadFileSignResponse, error) {
 	var resp GetUploadFileSignResponse
-	if err := c.call(ctx, "/xpay/get_upload_file_sign", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/get_upload_file_sign", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -415,7 +415,7 @@ type QueryPunishmentReasonsResponse struct {
 // 官方文档：POST /xpay/query_punishment_reasons
 func (c *Client) QueryPunishmentReasons(ctx context.Context) (*QueryPunishmentReasonsResponse, error) {
 	var resp QueryPunishmentReasonsResponse
-	if err := c.call(ctx, "/xpay/query_punishment_reasons", struct{}{}, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_punishment_reasons", struct{}{}, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

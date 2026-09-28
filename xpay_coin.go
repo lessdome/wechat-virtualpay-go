@@ -46,7 +46,7 @@ type QueryUserBalanceResponse struct {
 // 官方文档：POST /xpay/query_user_balance
 func (c *Client) QueryUserBalance(ctx context.Context, sessionKey string, req QueryUserBalanceRequest) (*QueryUserBalanceResponse, error) {
 	var resp QueryUserBalanceResponse
-	if err := c.call(ctx, "/xpay/query_user_balance", req, authUserAndPaySig, sessionKey, &resp); err != nil {
+	if err := c.callUser(ctx, "/xpay/query_user_balance", req, sessionKey, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -116,7 +116,7 @@ type CurrencyPayResponse struct {
 // 官方文档：POST /xpay/currency_pay
 func (c *Client) CurrencyPay(ctx context.Context, sessionKey string, req CurrencyPayRequest) (*CurrencyPayResponse, error) {
 	var resp CurrencyPayResponse
-	if err := c.call(ctx, "/xpay/currency_pay", req, authUserAndPaySig, sessionKey, &resp); err != nil {
+	if err := c.callUser(ctx, "/xpay/currency_pay", req, sessionKey, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -152,7 +152,7 @@ type CancelCurrencyPayResponse struct {
 // 官方文档：POST /xpay/cancel_currency_pay
 func (c *Client) CancelCurrencyPay(ctx context.Context, sessionKey string, req CancelCurrencyPayRequest) (*CancelCurrencyPayResponse, error) {
 	var resp CancelCurrencyPayResponse
-	if err := c.call(ctx, "/xpay/cancel_currency_pay", req, authUserAndPaySig, sessionKey, &resp); err != nil {
+	if err := c.callUser(ctx, "/xpay/cancel_currency_pay", req, sessionKey, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -190,12 +190,12 @@ type PresentCurrencyResponse struct {
 // 「0-正式环境 1-沙箱环境」，没有「仅作为签名校验」那句——那是广告金那批页面上的
 // 模板文字，本页并不存在这个「矛盾」。
 //
-// 若实测返回 268490003（签名错误），把下面的 authAccessTokenOnly 改为 authPaySig 即可。
+// 若实测返回 268490003（签名错误），把下面的 callMerchant 改为 callPaySig 即可。
 //
 // 官方文档：POST /xpay/present_currency
 func (c *Client) PresentCurrency(ctx context.Context, req PresentCurrencyRequest) (*PresentCurrencyResponse, error) {
 	var resp PresentCurrencyResponse
-	if err := c.call(ctx, "/xpay/present_currency", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/present_currency", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

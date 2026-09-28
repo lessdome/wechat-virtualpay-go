@@ -108,7 +108,7 @@ type queryOrderResponse struct {
 // 官方文档：POST /xpay/query_order
 func (c *Client) QueryOrder(ctx context.Context, req QueryOrderRequest) (*Order, error) {
 	var resp queryOrderResponse
-	if err := c.call(ctx, "/xpay/query_order", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Order, nil
@@ -180,12 +180,12 @@ type RefundOrderResponse struct {
 // ⚠️ 文档存疑：本接口的「注意事项」写着「使用用户态签名与支付签名」，但其 query
 // 参数表只列了 access_token 与 pay_sig（没有 signature），且该段落与其它接口的
 // 模板文字雷同。本包暂按参数表实现（只加 pay_sig）。若实测返回 268490003
-// （用户签名错误），把本方法改为 authUserAndPaySig 并传入 SessionKey 即可。
+// （用户签名错误），把本方法改为 callUser 并传入 SessionKey 即可。
 //
 // 官方文档：POST /xpay/refund_order
 func (c *Client) RefundOrder(ctx context.Context, req RefundOrderRequest) (*RefundOrderResponse, error) {
 	var resp RefundOrderResponse
-	if err := c.call(ctx, "/xpay/refund_order", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/refund_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -215,11 +215,11 @@ type NotifyProvideGoodsRequest struct {
 // ⚠️ 本页文档自身另有矛盾：order_id 与 wx_order_id 的**必填列都标「是」**，说明列
 // 却写「(与order_id二选一)」。本包按二选一的语义实现（两者都带 omitempty）。
 //
-// 若实测返回 268490003，把 authAccessTokenOnly 改为 authPaySig 即可。
+// 若实测返回 268490003，把 callMerchant 改为 callPaySig 即可。
 //
 // 官方文档：POST /xpay/notify_provide_goods
 func (c *Client) NotifyProvideGoods(ctx context.Context, req NotifyProvideGoodsRequest) error {
-	return c.call(ctx, "/xpay/notify_provide_goods", req, authAccessTokenOnly, "", nil)
+	return c.callMerchant(ctx, "/xpay/notify_provide_goods", req, nil)
 }
 
 // DownloadOrderType 是下载订单的类型。
@@ -287,7 +287,7 @@ type StartDownloadOrderResponse struct {
 // 官方文档：POST /xpay/start_download_order
 func (c *Client) StartDownloadOrder(ctx context.Context, req StartDownloadOrderRequest) (*StartDownloadOrderResponse, error) {
 	var resp StartDownloadOrderResponse
-	if err := c.call(ctx, "/xpay/start_download_order", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/start_download_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -328,7 +328,7 @@ type QueryDownloadOrderResponse struct {
 // 官方文档：POST /xpay/query_download_order
 func (c *Client) QueryDownloadOrder(ctx context.Context, req QueryDownloadOrderRequest) (*QueryDownloadOrderResponse, error) {
 	var resp QueryDownloadOrderResponse
-	if err := c.call(ctx, "/xpay/query_download_order", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_download_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

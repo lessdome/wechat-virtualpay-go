@@ -29,13 +29,11 @@ type Config struct {
 
 // Client 是虚拟支付的客户端。
 //
-// 它是并发安全的：除配置外只持有一个自带互斥锁的 access_token 缓存，
-// 所有可变的调用都通过 HTTPClient 完成。
+// 它是并发安全的：只持配置，不带任何可变状态（access_token 的缓存在包级，
+// 见 access_token.go）。所有对外的调用都通过 HTTPClient 完成。
 type Client struct {
 	cfg  Config
 	http *http.Client
-	// accessToken 按 AppSecret 获取并缓存 access_token。
-	accessToken *accessTokenSource
 }
 
 // NewClient 校验配置并构造 Client。
@@ -58,9 +56,5 @@ func NewClient(cfg Config) (*Client, error) {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	return &Client{
-		cfg:         cfg,
-		http:        hc,
-		accessToken: &accessTokenSource{appID: cfg.AppID, secret: cfg.AppSecret, http: hc},
-	}, nil
+	return &Client{cfg: cfg, http: hc}, nil
 }

@@ -35,7 +35,7 @@ type CreateWithdrawOrderResponse struct {
 // 官方文档：POST /xpay/create_withdraw_order
 func (c *Client) CreateWithdrawOrder(ctx context.Context, req CreateWithdrawOrderRequest) (*CreateWithdrawOrderResponse, error) {
 	var resp CreateWithdrawOrderResponse
-	if err := c.call(ctx, "/xpay/create_withdraw_order", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/create_withdraw_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -83,7 +83,7 @@ type QueryWithdrawOrderResponse struct {
 // 官方文档：POST /xpay/query_withdraw_order
 func (c *Client) QueryWithdrawOrder(ctx context.Context, req QueryWithdrawOrderRequest) (*QueryWithdrawOrderResponse, error) {
 	var resp QueryWithdrawOrderResponse
-	if err := c.call(ctx, "/xpay/query_withdraw_order", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_withdraw_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -114,7 +114,7 @@ type QueryBizBalanceResponse struct {
 // 官方文档：POST /xpay/query_biz_balance
 func (c *Client) QueryBizBalance(ctx context.Context, req QueryBizBalanceRequest) (*QueryBizBalanceResponse, error) {
 	var resp QueryBizBalanceResponse
-	if err := c.call(ctx, "/xpay/query_biz_balance", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_biz_balance", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

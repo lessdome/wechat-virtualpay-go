@@ -13,8 +13,8 @@ import (
 // 一侧有三处独立证据——query 参数表、HTTPS 示例 URL（`?access_token=ACCESS_TOKEN`）、
 // 注意事项，都不含 pay_sig。
 //
-// 故本包按参数表实现（authAccessTokenOnly，不签名）。若实测返回 268490003，
-// 把对应调用的 authAccessTokenOnly 改为 authPaySig 即可。
+// 故本包按参数表实现（callMerchant，不签名）。若实测返回 268490003，
+// 把对应调用的 callMerchant 改为 callPaySig 即可。
 
 // TransferAccountState 是广告金充值账户的审核状态。
 type TransferAccountState int
@@ -68,7 +68,7 @@ type QueryTransferAccountResponse struct {
 // 官方文档：POST /xpay/query_transfer_account
 func (c *Client) QueryTransferAccount(ctx context.Context, req QueryTransferAccountRequest) (*QueryTransferAccountResponse, error) {
 	var resp QueryTransferAccountResponse
-	if err := c.call(ctx, "/xpay/query_transfer_account", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/query_transfer_account", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -129,7 +129,7 @@ type QueryAdverFundsResponse struct {
 // 官方文档：POST /xpay/query_adver_funds
 func (c *Client) QueryAdverFunds(ctx context.Context, req QueryAdverFundsRequest) (*QueryAdverFundsResponse, error) {
 	var resp QueryAdverFundsResponse
-	if err := c.call(ctx, "/xpay/query_adver_funds", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/query_adver_funds", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -175,7 +175,7 @@ type CreateFundsBillResponse struct {
 // 官方文档：POST /xpay/create_funds_bill
 func (c *Client) CreateFundsBill(ctx context.Context, req CreateFundsBillRequest) (*CreateFundsBillResponse, error) {
 	var resp CreateFundsBillResponse
-	if err := c.call(ctx, "/xpay/create_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/create_funds_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -196,7 +196,7 @@ type BindTransferAccountRequest struct {
 // 官方文档：POST /xpay/bind_transfer_accout
 // （路径里的 accout 是微信官方的拼写，不是笔误，改动会导致 404。）
 func (c *Client) BindTransferAccount(ctx context.Context, req BindTransferAccountRequest) error {
-	return c.call(ctx, "/xpay/bind_transfer_accout", req, authAccessTokenOnly, "", nil)
+	return c.callMerchant(ctx, "/xpay/bind_transfer_accout", req, nil)
 }
 
 // FundsBillStatus 是广告金充值单状态。
@@ -260,7 +260,7 @@ type QueryFundsBillResponse struct {
 // 官方文档：POST /xpay/query_funds_bill
 func (c *Client) QueryFundsBill(ctx context.Context, req QueryFundsBillRequest) (*QueryFundsBillResponse, error) {
 	var resp QueryFundsBillResponse
-	if err := c.call(ctx, "/xpay/query_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/query_funds_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -314,7 +314,7 @@ type QueryRecoverBillResponse struct {
 // 官方文档：POST /xpay/query_recover_bill
 func (c *Client) QueryRecoverBill(ctx context.Context, req QueryRecoverBillRequest) (*QueryRecoverBillResponse, error) {
 	var resp QueryRecoverBillResponse
-	if err := c.call(ctx, "/xpay/query_recover_bill", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/query_recover_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -344,7 +344,7 @@ type DownloadAdverFundsOrderResponse struct {
 // 官方文档：POST /xpay/download_adverfunds_order
 func (c *Client) DownloadAdverFundsOrder(ctx context.Context, req DownloadAdverFundsOrderRequest) (*DownloadAdverFundsOrderResponse, error) {
 	var resp DownloadAdverFundsOrderResponse
-	if err := c.call(ctx, "/xpay/download_adverfunds_order", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := c.callMerchant(ctx, "/xpay/download_adverfunds_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

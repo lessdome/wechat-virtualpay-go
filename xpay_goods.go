@@ -33,7 +33,7 @@ type StartUploadGoodsRequest struct {
 //
 // 官方文档：POST /xpay/start_upload_goods
 func (c *Client) StartUploadGoods(ctx context.Context, req StartUploadGoodsRequest) error {
-	return c.call(ctx, "/xpay/start_upload_goods", req, authPaySig, "", nil)
+	return c.callPaySig(ctx, "/xpay/start_upload_goods", req, nil)
 }
 
 // GoodsBatchStatus 是道具「上传/发布」**批量任务**的状态（query_upload_goods、
@@ -99,7 +99,7 @@ type QueryUploadGoodsResponse struct {
 // 官方文档：POST /xpay/query_upload_goods
 func (c *Client) QueryUploadGoods(ctx context.Context, req QueryUploadGoodsRequest) (*QueryUploadGoodsResponse, error) {
 	var resp QueryUploadGoodsResponse
-	if err := c.call(ctx, "/xpay/query_upload_goods", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_upload_goods", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -128,7 +128,7 @@ type StartPublishGoodsRequest struct {
 //
 // 官方文档：POST /xpay/start_publish_goods
 func (c *Client) StartPublishGoods(ctx context.Context, req StartPublishGoodsRequest) error {
-	return c.call(ctx, "/xpay/start_publish_goods", req, authPaySig, "", nil)
+	return c.callPaySig(ctx, "/xpay/start_publish_goods", req, nil)
 }
 
 // PublishedGoodsItem 是查询发布任务结果里的单个道具。
@@ -160,7 +160,7 @@ type QueryPublishGoodsResponse struct {
 // 官方文档：POST /xpay/query_publish_goods
 func (c *Client) QueryPublishGoods(ctx context.Context, req QueryPublishGoodsRequest) (*QueryPublishGoodsResponse, error) {
 	var resp QueryPublishGoodsResponse
-	if err := c.call(ctx, "/xpay/query_publish_goods", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/query_publish_goods", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

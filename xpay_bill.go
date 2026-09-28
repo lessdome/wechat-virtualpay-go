@@ -28,7 +28,7 @@ type DownloadBillResponse struct {
 // 官方文档：POST /xpay/download_bill
 func (c *Client) DownloadBill(ctx context.Context, req DownloadBillRequest) (*DownloadBillResponse, error) {
 	var resp DownloadBillResponse
-	if err := c.call(ctx, "/xpay/download_bill", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/download_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -63,7 +63,7 @@ type DownloadIOSBillResponse struct {
 // 官方文档：POST /xpay/download_ios_settlement_bill
 func (c *Client) DownloadIOSBill(ctx context.Context, req DownloadIOSBillRequest) (*DownloadIOSBillResponse, error) {
 	var resp DownloadIOSBillResponse
-	if err := c.call(ctx, "/xpay/download_ios_settlement_bill", req, authPaySig, "", &resp); err != nil {
+	if err := c.callPaySig(ctx, "/xpay/download_ios_settlement_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

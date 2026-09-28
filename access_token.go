@@ -19,38 +19,36 @@ import (
 // 上请求被阻塞。对 7200 秒的有效期来说，等于每 1 小时 50 分钟换一次。
 const accessTokenRefreshMargin = 10 * time.Minute
 
-// accessTokenSource 用「稳定版接口调用凭据」自动获取并缓存 access_token。
+// access_token 的缓存放在**包级**，而不是挂在 Client 上。
 //
-// 用的是 POST /cgi-bin/stable_token 的**普通模式**（不带 force_refresh）。该模式有
-// 两个关键性质：
+// 这么放是为了「就地作废」：任何一次调用发现 token 不可用（微信回报 40001 等）时，
+// 都能立刻把缓存清掉，于是**所有** Client 的下一次调用都会去取新的——不必干等到
+// 缓存自然过期，那可能是近两个小时。
 //
-//  1. 有效期内**重复调用不会更新** token；
-//  2. 与旧的 GET /cgi-bin/token **完全隔离，互不影响**。
-//
-// 因此多个实例各持一份内存缓存是安全的——不会互相顶掉，也就不需要分布式锁或
-// 集中式缓存。这正是选择稳定版而非旧接口的原因。
-type accessTokenSource struct {
-	appID  string
-	secret string
-	http   *http.Client
+// 按 appID 分键：同一个进程里可能配了多个小程序（多个 Client），它们的 token
+// 绝不能混用。
+var accessTokenCache = struct {
+	mu      sync.Mutex
+	entries map[string]accessTokenEntry
+}{entries: map[string]accessTokenEntry{}}
 
-	mu          sync.Mutex
-	accessToken string
-	expiresAt   time.Time
+type accessTokenEntry struct {
+	value     string
+	expiresAt time.Time
 }
 
-// AccessToken 返回当前可用的 access_token，必要时刷新。
-func (t *accessTokenSource) AccessToken(ctx context.Context) (string, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+// accessToken 返回指定小程序当前可用的 access_token，必要时重新获取。
+func accessToken(ctx context.Context, hc *http.Client, appID, secret string) (string, error) {
+	accessTokenCache.mu.Lock()
+	defer accessTokenCache.mu.Unlock()
 
 	// 串行化并发调用：微信对 stable_token 有频率限制（1 万次/分钟），并发去刷
 	// 没有意义，只会浪费配额、且拿回来的还是同一个 access_token。
-	if t.accessToken != "" && time.Now().Before(t.expiresAt) {
-		return t.accessToken, nil
+	if e, ok := accessTokenCache.entries[appID]; ok && time.Now().Before(e.expiresAt) {
+		return e.value, nil
 	}
 
-	accessToken, lifetime, err := t.fetch(ctx)
+	value, lifetime, err := fetchAccessToken(ctx, hc, appID, secret)
 	if err != nil {
 		return "", err
 	}
@@ -60,9 +58,39 @@ func (t *accessTokenSource) AccessToken(ctx context.Context) (string, error) {
 	if margin > lifetime/2 {
 		margin = lifetime / 2
 	}
-	t.accessToken = accessToken
-	t.expiresAt = time.Now().Add(lifetime - margin)
-	return accessToken, nil
+	accessTokenCache.entries[appID] = accessTokenEntry{
+		value:     value,
+		expiresAt: time.Now().Add(lifetime - margin),
+	}
+	return value, nil
+}
+
+// invalidateAccessToken 作废这个 appID 的缓存，下一次 accessToken 会重新获取。
+//
+// 用在微信明确回报 access_token 不可用时：缓存里的值多半已被别处作废（有人调了
+// force_refresh，或 AppSecret 被改过），不主动清就只能干等到 expiresAt。
+func invalidateAccessToken(appID string) {
+	accessTokenCache.mu.Lock()
+	defer accessTokenCache.mu.Unlock()
+	delete(accessTokenCache.entries, appID)
+}
+
+// 官方《通用错误码》里表示「手上的 access_token 不能用」的那几个码。
+//
+// 刻意不导出：本包的错误就是字符串，调用方无法按码分支，导出常量没有用处。
+const (
+	codeAccessTokenInvalid = 40001 // access_token 无效或不是最新的
+	codeInvalidAccessToken = 40014 // 不合法的 access_token
+	codeAccessTokenExpired = 42001 // access_token 超时
+)
+
+// isAccessTokenUnusable 判断错误码是否表示手上的 access_token 不能用。
+func isAccessTokenUnusable(code int) bool {
+	switch code {
+	case codeAccessTokenInvalid, codeInvalidAccessToken, codeAccessTokenExpired:
+		return true
+	}
+	return false
 }
 
 // stableAccessTokenRequest 是 POST /cgi-bin/stable_token 的请求体。
@@ -78,11 +106,21 @@ type stableAccessTokenRequest struct {
 	Secret string `json:"secret"`
 }
 
-func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, error) {
+// fetchAccessToken 走「稳定版接口调用凭据」取一个新的 access_token。
+//
+// 用的是 POST /cgi-bin/stable_token 的**普通模式**（不带 force_refresh）。该模式有
+// 两个关键性质：
+//
+//  1. 有效期内**重复调用不会更新** token；
+//  2. 与旧的 GET /cgi-bin/token **完全隔离，互不影响**。
+//
+// 因此多实例各持一份内存缓存是安全的——不会互相顶掉，也就不需要分布式锁或
+// 集中式缓存。这正是选择稳定版而非旧接口的原因。
+func fetchAccessToken(ctx context.Context, hc *http.Client, appID, secret string) (string, time.Duration, error) {
 	body, err := marshalNoHTMLEscape(stableAccessTokenRequest{
 		GrantType: "client_credential",
-		AppID:     t.appID,
-		Secret:    t.secret,
+		AppID:     appID,
+		Secret:    secret,
 	})
 	if err != nil {
 		return "", 0, fmt.Errorf("wechat_virtualpay_go: 序列化 stable_token 请求失败: %w", err)
@@ -95,7 +133,7 @@ func (t *accessTokenSource) fetch(ctx context.Context) (string, time.Duration, e
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := t.http.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("wechat_virtualpay_go: 请求 stable_token 失败: %w", err)
 	}
