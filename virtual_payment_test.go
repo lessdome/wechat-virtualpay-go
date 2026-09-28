@@ -23,14 +23,13 @@ func goodsReq() GoodsPaymentRequest {
 		Quantity:   1,
 		OutTradeNo: "xxxxxx12",
 		Attach:     "testdata",
-		SessionKey: testSessionKey,
 	}
 }
 
 // 官方示例用的就是道具直购。它的 outTradeNo 是 'xxxxxx'（6 位）不合它自己的规范，
 // 这里换成 8 位，其余字段与顺序完全照抄。
 func TestGoodsSignDataMatchesOfficialExample(t *testing.T) {
-	p, err := BuildGoodsPayment(testOfferID, testAppKey, goodsReq())
+	p, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, goodsReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +49,7 @@ func TestGoodsSignDataMatchesOfficialExample(t *testing.T) {
 
 // 自洽 + 可独立复算：两个签名都必须能由**返回的 SignData** 独立算出。
 func TestGoodsSignatures(t *testing.T) {
-	p, err := BuildGoodsPayment(testOfferID, testAppKey, goodsReq())
+	p, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, goodsReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +73,7 @@ func TestGoodsDoesNotTouchNetwork(t *testing.T) {
 	rt := &sessionRT{body: `{"openid":"o","session_key":"s"}`}
 	swapClient(t, rt)
 
-	if _, err := BuildGoodsPayment(testOfferID, testAppKey, goodsReq()); err != nil {
+	if _, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, goodsReq()); err != nil {
 		t.Fatal(err)
 	}
 	if rt.calls != 0 {
@@ -94,9 +93,7 @@ func TestGoodsWithCode2Session(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := goodsReq()
-	r.SessionKey = sess.SessionKey
-	p, err := BuildGoodsPayment(testOfferID, testAppKey, r)
+	p, err := BuildGoodsPayment(testOfferID, testAppKey, sess.SessionKey, goodsReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +110,7 @@ func TestGoodsWithCode2Session(t *testing.T) {
 func TestGoodsQuantity(t *testing.T) {
 	base := goodsReq()
 
-	p, err := BuildGoodsPayment(testOfferID, testAppKey, base)
+	p, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +120,7 @@ func TestGoodsQuantity(t *testing.T) {
 
 	q := base
 	q.Quantity = 3
-	p, err = BuildGoodsPayment(testOfferID, testAppKey, q)
+	p, err = BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +133,7 @@ func TestGoodsQuantity(t *testing.T) {
 func TestGoodsActivitySellingPrice(t *testing.T) {
 	r := goodsReq()
 	r.GoodsPrice, r.ActivitySellingPrice = 100, 60
-	p, err := BuildGoodsPayment(testOfferID, testAppKey, r)
+	p, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +148,7 @@ func TestGoodsActivitySellingPrice(t *testing.T) {
 	}
 
 	r.ActivitySellingPrice = 0
-	p2, err := BuildGoodsPayment(testOfferID, testAppKey, r)
+	p2, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +167,6 @@ func TestGoodsValidation(t *testing.T) {
 	}{
 		{"ProductID", func(r *GoodsPaymentRequest) { r.ProductID = "" }, "ProductID"},
 		{"GoodsPrice", func(r *GoodsPaymentRequest) { r.GoodsPrice = 0 }, "GoodsPrice"},
-		{"SessionKey", func(r *GoodsPaymentRequest) { r.SessionKey = "" }, "SessionKey"},
 		{"OutTradeNo 空", func(r *GoodsPaymentRequest) { r.OutTradeNo = "" }, "OutTradeNo"},
 		{"OutTradeNo 太短", func(r *GoodsPaymentRequest) { r.OutTradeNo = "abc" }, "OutTradeNo"},
 		{"OutTradeNo 非法字符", func(r *GoodsPaymentRequest) { r.OutTradeNo = "abc#1234567" }, "OutTradeNo"},
@@ -180,18 +176,19 @@ func TestGoodsValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := base
 			tc.f(&r)
-			if _, err := BuildGoodsPayment(testOfferID, testAppKey, r); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, r); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("期望报错含 %q，实际: %v", tc.want, err)
 			}
 		})
 	}
 
-	for _, tc := range []struct{ name, oid, key, want string }{
-		{"offerID", "", testAppKey, "offerID"},
-		{"appKey", testOfferID, "", "appKey"},
+	for _, tc := range []struct{ name, oid, key, sk, want string }{
+		{"offerID", "", testAppKey, testSessionKey, "offerID"},
+		{"appKey", testOfferID, "", testSessionKey, "appKey"},
+		{"sessionKey", testOfferID, testAppKey, "", "sessionKey"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := BuildGoodsPayment(tc.oid, tc.key, base); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := BuildGoodsPayment(tc.oid, tc.key, tc.sk, base); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("期望报错含 %q，实际: %v", tc.want, err)
 			}
 		})

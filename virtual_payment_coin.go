@@ -41,11 +41,6 @@ type CoinPaymentRequest struct {
 	// 官方对它的说明是「发货通知时会透传给开发者」——代币充值没有发货环节，它究竟
 	// 从哪儿、什么时候回来，文档没写。
 	Attach string
-	// SessionKey 用户登录态，用它算用户态签名 signature。必填。
-	//
-	// **用本包的 Code2Session() 换**（code 来自前端 wx.login），详细说明见
-	// GoodsPaymentRequest.SessionKey。
-	SessionKey string
 }
 
 // coinSignData 是代币充值的 signData 结构。
@@ -62,33 +57,33 @@ type coinSignData struct {
 
 // BuildCoinPayment 生成代币充值的下单参数。
 //
-// 与 BuildGoodsPayment 一样：**不联网**，session_key 要先用 Code2Session 换好传进来。
+// 三个凭据（offerID / appKey / sessionKey）的说明与 BuildGoodsPayment 完全一致：
+// sessionKey 用 Code2Session() 换，是会话级凭据、会过期。本函数不联网。
 //
 //	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
 //	if err != nil {
 //		return err
 //	}
-//	p, err := wechat_virtualpay_go.BuildCoinPayment(offerID, appKey,
+//	p, err := wechat_virtualpay_go.BuildCoinPayment(offerID, appKey, sess.SessionKey,
 //		wechat_virtualpay_go.CoinPaymentRequest{
 //			Quantity:   100, // 充 100 个代币
 //			OutTradeNo: wechat_virtualpay_go.NewOutTradeNo(),
 //			Attach:     "自定义透传数据",
-//			SessionKey: sess.SessionKey,
 //		})
 //
 // 返回后把 p.SignData / p.PaySig / p.Signature / p.Mode 交给前端，
 // 传给 wx.requestVirtualPayment。**SignData 必须原样传**，前端不得重新序列化。
 //
 // 注意客户端有个前提：wx.requestVirtualPayment 需要基础库 >= 2.19.2。
-func BuildCoinPayment(offerID, appKey string, req CoinPaymentRequest) (*VirtualPaymentParams, error) {
+func BuildCoinPayment(offerID, appKey, sessionKey string, req CoinPaymentRequest) (*VirtualPaymentParams, error) {
 	if offerID == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: offerID 不能为空")
 	}
 	if appKey == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: appKey 不能为空")
 	}
-	if req.SessionKey == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: SessionKey 不能为空（用 Code2Session 换取）")
+	if sessionKey == "" {
+		return nil, fmt.Errorf("wechat_virtualpay_go: sessionKey 不能为空（用 Code2Session 换取）")
 	}
 	if err := checkOutTradeNo(req.OutTradeNo); err != nil {
 		return nil, err
@@ -111,5 +106,5 @@ func BuildCoinPayment(offerID, appKey string, req CoinPaymentRequest) (*VirtualP
 		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化下单参数失败: %w", err)
 	}
 
-	return finishPayment(appKey, req.SessionKey, ModeShortSeriesCoin, string(raw)), nil
+	return finishPayment(appKey, sessionKey, ModeShortSeriesCoin, string(raw)), nil
 }

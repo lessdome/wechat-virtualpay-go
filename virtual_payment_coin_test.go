@@ -13,13 +13,12 @@ func coinReq() CoinPaymentRequest {
 		Quantity:   100,
 		OutTradeNo: "COIN20260101",
 		Attach:     "testdata",
-		SessionKey: testSessionKey,
 	}
 }
 
 // 字段与顺序：沿用官方字段表的相对次序，且**不带**道具专有的那几个。
 func TestCoinSignDataShape(t *testing.T) {
-	p, err := BuildCoinPayment(testOfferID, testAppKey, coinReq())
+	p, err := BuildCoinPayment(testOfferID, testAppKey, testSessionKey, coinReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +40,7 @@ func TestCoinSignDataShape(t *testing.T) {
 
 // 签名自洽：两个签名都能由**返回的 SignData** 独立算出。
 func TestCoinSignatures(t *testing.T) {
-	p, err := BuildCoinPayment(testOfferID, testAppKey, coinReq())
+	p, err := BuildCoinPayment(testOfferID, testAppKey, testSessionKey, coinReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +61,7 @@ func TestCoinDoesNotTouchNetwork(t *testing.T) {
 	rt := &sessionRT{body: `{"openid":"o","session_key":"s"}`}
 	swapClient(t, rt)
 
-	if _, err := BuildCoinPayment(testOfferID, testAppKey, coinReq()); err != nil {
+	if _, err := BuildCoinPayment(testOfferID, testAppKey, testSessionKey, coinReq()); err != nil {
 		t.Fatal(err)
 	}
 	if rt.calls != 0 {
@@ -72,11 +71,11 @@ func TestCoinDoesNotTouchNetwork(t *testing.T) {
 
 // 两条流程确实是分开的：同样的凭据下，signData 与 mode 都不同。
 func TestCoinDiffersFromGoods(t *testing.T) {
-	goods, err := BuildGoodsPayment(testOfferID, testAppKey, goodsReq())
+	goods, err := BuildGoodsPayment(testOfferID, testAppKey, testSessionKey, goodsReq())
 	if err != nil {
 		t.Fatal(err)
 	}
-	coin, err := BuildCoinPayment(testOfferID, testAppKey, coinReq())
+	coin, err := BuildCoinPayment(testOfferID, testAppKey, testSessionKey, coinReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +95,7 @@ func TestCoinDiffersFromGoods(t *testing.T) {
 func TestCoinQuantityDefault(t *testing.T) {
 	r := coinReq()
 	r.Quantity = 0
-	p, err := BuildCoinPayment(testOfferID, testAppKey, r)
+	p, err := BuildCoinPayment(testOfferID, testAppKey, testSessionKey, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +112,6 @@ func TestCoinValidation(t *testing.T) {
 		f    func(*CoinPaymentRequest)
 		want string
 	}{
-		{"SessionKey", func(r *CoinPaymentRequest) { r.SessionKey = "" }, "SessionKey"},
 		{"OutTradeNo 空", func(r *CoinPaymentRequest) { r.OutTradeNo = "" }, "OutTradeNo"},
 		{"OutTradeNo 非法字符", func(r *CoinPaymentRequest) { r.OutTradeNo = "abc#1234567" }, "OutTradeNo"},
 		{"OutTradeNo 下划线开头", func(r *CoinPaymentRequest) { r.OutTradeNo = "_abc12345" }, "下划线"},
@@ -122,18 +120,19 @@ func TestCoinValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := base
 			tc.f(&r)
-			if _, err := BuildCoinPayment(testOfferID, testAppKey, r); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := BuildCoinPayment(testOfferID, testAppKey, testSessionKey, r); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("期望报错含 %q，实际: %v", tc.want, err)
 			}
 		})
 	}
 
-	for _, tc := range []struct{ name, oid, key, want string }{
-		{"offerID", "", testAppKey, "offerID"},
-		{"appKey", testOfferID, "", "appKey"},
+	for _, tc := range []struct{ name, oid, key, sk, want string }{
+		{"offerID", "", testAppKey, testSessionKey, "offerID"},
+		{"appKey", testOfferID, "", testSessionKey, "appKey"},
+		{"sessionKey", testOfferID, testAppKey, "", "sessionKey"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := BuildCoinPayment(tc.oid, tc.key, base); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := BuildCoinPayment(tc.oid, tc.key, tc.sk, base); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("期望报错含 %q，实际: %v", tc.want, err)
 			}
 		})
