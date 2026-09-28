@@ -27,7 +27,7 @@ type PaymentMode string
 const (
 	// ModeShortSeriesGoods 道具直购。
 	ModeShortSeriesGoods PaymentMode = "short_series_goods"
-	// ModeShortSeriesCoin 代币充值（其下单参数生成本包尚未实现）。
+	// ModeShortSeriesCoin 代币充值（下单参数见 BuildCoinPayment）。
 	ModeShortSeriesCoin PaymentMode = "short_series_coin"
 )
 
