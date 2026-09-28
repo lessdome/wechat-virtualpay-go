@@ -65,7 +65,7 @@ type GoodsPaymentRequest struct {
 	Attach string
 	// SessionKey 用户登录态，用它算用户态签名 signature。必填。
 	//
-	// 由本包的 Code2Session 用前端 wx.login 的 code 换来：
+	// **用本包的 Code2Session() 换**（code 来自前端 wx.login）：
 	//
 	//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
 	//	// 把 sess.SessionKey 填到这里

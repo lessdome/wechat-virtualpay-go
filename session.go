@@ -44,8 +44,12 @@ type SessionInfo struct {
 
 // Code2Session 用 wx.login 的 code 换取用户登录态。
 //
+// appID / appSecret 是小程序的 AppID 与密钥（MP 后台的开发设置里查看与重置）。
 // code 由小程序端 `wx.login()` 获取，**有效期五分钟且只能用一次**；换来的
 // SessionKey 会过期，过期后要让前端重新 wx.login。
+//
+// 换出来的 SessionKey 给谁用：下单签名（BuildGoodsPayment 等）与用户态接口，
+// 见相应函数的注释。
 //
 // 本接口自己的错误码只有 40029（code 无效），其余指向官方《通用错误码》一页
 // （常见的有 code 已过期、code 已被使用）。
