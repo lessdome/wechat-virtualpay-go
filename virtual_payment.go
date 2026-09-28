@@ -9,11 +9,14 @@ import (
 	"time"
 )
 
-// 本文件实现「道具直购」的下单参数生成。
+// 本文件实现「虚拟支付」下单参数的生成——道具直购与代币充值两种模式共用一套。
 //
 // 官方 2.1 时序图里这条流程是：服务端把参数拼成一个字符串、算两个签名，交给小程序端
-// 由 wx.requestVirtualPayment 拉起支付。它**不发起任何网络请求**——唯一需要先从别处
-// 拿到的输入是 session_key（见 GoodsPaymentRequest.SessionKey）。
+// 由 wx.requestVirtualPayment 拉起支付。它**不发起任何网络请求**。
+//
+// 两种模式的差别只有两处（出自官方《wx.requestVirtualPayment》的 signData 结构表）：
+// mode 不同，以及 productId / goodsPrice / activitySellingPrice 三个字段「仅
+// mode=short_series_goods 时需要必填」。其余六个字段完全相同，所以合成一个方法。
 
 // payMethodRequestVirtualPayment 是拉起支付时固定的签名 uri。
 //
@@ -27,7 +30,7 @@ type PaymentMode string
 const (
 	// ModeShortSeriesGoods 道具直购。
 	ModeShortSeriesGoods PaymentMode = "short_series_goods"
-	// ModeShortSeriesCoin 代币充值（下单参数见 BuildCoinPayment）。
+	// ModeShortSeriesCoin 代币充值。
 	ModeShortSeriesCoin PaymentMode = "short_series_coin"
 )
 
@@ -44,16 +47,37 @@ type VirtualPaymentParams struct {
 	Mode PaymentMode
 }
 
-// GoodsPaymentRequest 是道具直购一次下单所需的输入。
-type GoodsPaymentRequest struct {
-	// ProductID 道具 ID（signData 的 productId）。必填。
+// PaymentRequest 是一次下单的**订单参数**。凭据（offerID / appKey / sessionKey）不走
+// 这里，是 BuildPayment 的参数。
+//
+// 字段与官方 signData 结构表一一对应。表里共 9 个字段，其中三个不按单变化，由本包
+// 固定或从凭据来：
+//
+//	offerId        ← 函数参数 offerID（商户级）
+//	env            ← 固定 0（本包只支持现网）
+//	currencyType   ← 固定 CNY（官方目前只支持这一种）
+//
+// 剩下 6 个按单变化的都在下面。
+type PaymentRequest struct {
+	// Mode 支付类型。必填——选错模式会走错流程（买道具还是充代币，金额的含义完全不同），
+	// 所以本包不替你猜默认值。
+	//
+	// ⚠️ 存疑：官方**没有给代币充值的 signData 示例**（客户端页的示例代码只有道具直购
+	// 那一条），所以「代币不带 productId / goodsPrice」是从字段表的措辞推出来的。
+	// 另有一处反证：客户端错误码 -15018 写「代币或者道具 productId 审核不通过」，
+	// 字面上把两者连在一起。真机联调时要确认。
+	Mode PaymentMode
+	// ProductID 道具 ID。**仅道具直购需要**；代币充值传了会报错。
 	ProductID string
-	// GoodsPrice 道具单价，单位**分**（signData 的 goodsPrice）。必填。
+	// GoodsPrice 道具单价，单位**分**。**仅道具直购需要**；代币充值传了会报错。
 	// 微信用它校验与后台配置的道具价格是否一致。
 	GoodsPrice int64
 	// Quantity 购买数量（signData 的 buyQuantity）。<=0 时按 1 处理。
+	//
+	// 道具直购是买几个道具；代币充值是充多少个代币——代币的单价由后台的代币配置
+	// 决定，官方 signData 里没有价格字段。
 	Quantity int64
-	// ActivitySellingPrice 优惠价，单位**分**。可选。
+	// ActivitySellingPrice 优惠价，单位**分**。可选，**仅道具直购**。
 	// 传了它就是实际下单价格。官方只说「需与 goodsPrice 一起传入」——道具直购下
 	// goodsPrice 本来就必填，所以无需额外校验。
 	ActivitySellingPrice int64
@@ -61,20 +85,24 @@ type GoodsPaymentRequest struct {
 	// 8–32 字符，只能由数字、大小写字母、_-|*@ 组成，不能以 _ 开头，且每单只能用一次。
 	// 懒得拼就用本包的 NewOutTradeNo()。
 	OutTradeNo string
-	// Attach 透传数据（signData 的 attach）。必填，发货通知会原样带回。
+	// Attach 透传数据（signData 的 attach）。必填。
+	//
+	// 官方对它的说明是「发货通知时会透传给开发者」——代币充值没有发货环节，它究竟
+	// 从哪儿、什么时候回来，文档没写。
 	Attach string
 }
 
-// goodsSignData 是道具直购的 signData 结构。
+// paymentSignData 是 signData 的序列化结构。
 //
-// 字段顺序就是序列化顺序，与官方示例保持一致。
-type goodsSignData struct {
+// 字段顺序与官方字段表一致。三个道具专有的字段带 omitempty，所以代币充值天然不会
+// 带上它们——两种模式共用这一个结构体。
+type paymentSignData struct {
 	OfferID              string `json:"offerId"`
 	BuyQuantity          int64  `json:"buyQuantity"`
 	Env                  int    `json:"env"`
 	CurrencyType         string `json:"currencyType"`
-	ProductID            string `json:"productId"`
-	GoodsPrice           int64  `json:"goodsPrice"`
+	ProductID            string `json:"productId,omitempty"`
+	GoodsPrice           int64  `json:"goodsPrice,omitempty"`
 	ActivitySellingPrice int64  `json:"activitySellingPrice,omitempty"`
 	OutTradeNo           string `json:"outTradeNo"`
 	Attach               string `json:"attach"`
@@ -83,7 +111,7 @@ type goodsSignData struct {
 // outTradeNoRe 是官方对 outTradeNo 的字符与长度要求。
 var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 
-// BuildGoodsPayment 生成道具直购的下单参数。
+// BuildPayment 生成一次虚拟支付的下单参数（道具直购与代币充值共用）。
 //
 // offerID / appKey / sessionKey 是三个凭据，订单本身的数据都在 req 里。
 //
@@ -94,28 +122,23 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 // 两点要留意：它是**会话级**凭据，不是每单一个——同一次登录态可以下多笔单；它会
 // **过期**，过期的表现是服务端报 268490009、客户端报 -15007，届时让前端重新 wx.login。
 //
-// 本函数不联网。
+// 本函数不联网。典型用法：
 //
-//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code) // code 来自前端 wx.login
-//	if err != nil {
-//		return err
-//	}
-//	p, err := wechat_virtualpay_go.BuildGoodsPayment(offerID, appKey, sess.SessionKey,
-//		wechat_virtualpay_go.GoodsPaymentRequest{
-//			ProductID:  "prod_001",
-//			GoodsPrice: 100, // 单位：分
-//			OutTradeNo: wechat_virtualpay_go.NewOutTradeNo(), // 也可以自己拼
+//	p, err := wechat_virtualpay_go.BuildPayment(offerID, appKey, sess.SessionKey,
+//		wechat_virtualpay_go.PaymentRequest{
+//			Mode:       wechat_virtualpay_go.ModeShortSeriesGoods, // 或 ModeShortSeriesCoin
+//			ProductID:  "prod_001",                                // 仅道具直购
+//			GoodsPrice: 100,                                       // 单位：分，仅道具直购
+//			Quantity:   1,
+//			OutTradeNo: wechat_virtualpay_go.NewOutTradeNo(),
 //			Attach:     "自定义透传数据",
 //		})
-//
-// 顺序上建议**先把本函数的入参准备好、再换登录态**：code 只能用一次，若先换、后因
-// 参数不合法返回错误，那个 code 就白烧了，用户得重新 wx.login。
 //
 // 返回后把 p.SignData / p.PaySig / p.Signature / p.Mode 交给前端，传给
 // wx.requestVirtualPayment。**SignData 必须原样传**，前端不得重新序列化。
 //
 // 注意客户端有个前提：wx.requestVirtualPayment 需要基础库 >= 2.19.2。
-func BuildGoodsPayment(offerID, appKey, sessionKey string, req GoodsPaymentRequest) (*VirtualPaymentParams, error) {
+func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*VirtualPaymentParams, error) {
 	if offerID == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: offerID 不能为空")
 	}
@@ -125,14 +148,27 @@ func BuildGoodsPayment(offerID, appKey, sessionKey string, req GoodsPaymentReque
 	if sessionKey == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: sessionKey 不能为空（用 Code2Session 换取）")
 	}
-	if req.ProductID == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供 ProductID")
-	}
-	if req.GoodsPrice <= 0 {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供正数 GoodsPrice（单位：分）")
-	}
 	if err := checkOutTradeNo(req.OutTradeNo); err != nil {
 		return nil, err
+	}
+
+	switch req.Mode {
+	case ModeShortSeriesGoods:
+		if req.ProductID == "" {
+			return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供 ProductID")
+		}
+		if req.GoodsPrice <= 0 {
+			return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供正数 GoodsPrice（单位：分）")
+		}
+	case ModeShortSeriesCoin:
+		// 代币充值不带这三个道具字段。传了就是误用——静默忽略会让人以为价格生效了，
+		// 而金额是这里最不能含糊的东西，所以直接报错。
+		if req.ProductID != "" || req.GoodsPrice != 0 || req.ActivitySellingPrice != 0 {
+			return nil, fmt.Errorf("wechat_virtualpay_go: 代币充值不该传 ProductID / GoodsPrice / ActivitySellingPrice（它们是道具直购专用的）")
+		}
+	default:
+		return nil, fmt.Errorf("wechat_virtualpay_go: Mode %q 非法，应为 %q 或 %q",
+			req.Mode, ModeShortSeriesGoods, ModeShortSeriesCoin)
 	}
 
 	qty := req.Quantity
@@ -140,7 +176,7 @@ func BuildGoodsPayment(offerID, appKey, sessionKey string, req GoodsPaymentReque
 		qty = 1
 	}
 
-	raw, err := json.Marshal(goodsSignData{
+	raw, err := json.Marshal(paymentSignData{
 		OfferID:              offerID,
 		BuyQuantity:          qty,
 		Env:                  0, // 本包只支持现网环境
@@ -155,12 +191,10 @@ func BuildGoodsPayment(offerID, appKey, sessionKey string, req GoodsPaymentReque
 		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化下单参数失败: %w", err)
 	}
 
-	return finishPayment(appKey, sessionKey, ModeShortSeriesGoods, string(raw)), nil
+	return finishPayment(appKey, sessionKey, req.Mode, string(raw)), nil
 }
 
 // finishPayment 把已经序列化好的 signData 补成完整参数：算两个签名、填 Mode。
-//
-// 它不含任何业务判断——两种支付模式都走这一条，区别只在外层拼哪个结构体。
 func finishPayment(appKey, sessionKey string, mode PaymentMode, signData string) *VirtualPaymentParams {
 	return &VirtualPaymentParams{
 		SignData:  signData,
