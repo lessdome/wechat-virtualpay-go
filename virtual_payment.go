@@ -61,7 +61,14 @@ type GoodsPaymentRequest struct {
 	OutTradeNo string
 	// Attach 透传数据（signData 的 attach）。必填，发货通知会原样带回。
 	Attach string
-	// SessionKey 由 wx.login 的 code 通过 code2Session 换取。必填，用于算 signature。
+	// SessionKey 用户登录态，用它算 signature。必填。
+	//
+	// 它由本包的 Code2Session 用 wx.login 的 code 换来（code 只有五分钟有效）：
+	//
+	//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
+	//	// 然后把 sess.SessionKey 填进来
+	//
+	// 注意它是**会话级**凭据，不是每单一个——同一用户的一次登录态可以用于多笔下单。
 	SessionKey string
 }
 
@@ -85,8 +92,23 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 
 // BuildGoodsPayment 生成道具直购的下单参数。
 //
-// 它不发起任何网络请求；返回的 SignData 交给前端，连同 PaySig / Signature / Mode
-// 一起传给 wx.requestVirtualPayment。
+// 它**不发起任何网络请求**——session_key 要先用 Code2Session 换好再传进来：
+//
+//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
+//	if err != nil {
+//		return err
+//	}
+//	p, err := wechat_virtualpay_go.BuildGoodsPayment(offerID, appKey,
+//		wechat_virtualpay_go.GoodsPaymentRequest{
+//			ProductID:  "prod_001",
+//			GoodsPrice: 100, // 单位：分
+//			OutTradeNo: "ORDER20260101001",
+//			Attach:     "自定义透传数据",
+//			SessionKey: sess.SessionKey,
+//		})
+//
+// 返回的 SignData 交给前端，连同 PaySig / Signature / Mode 一起传给
+// wx.requestVirtualPayment——SignData 必须原样传，前端不得重新序列化。
 //
 // 注意客户端有个前提：wx.requestVirtualPayment 需要基础库 >= 2.19.2。
 func BuildGoodsPayment(offerID, appKey string, req GoodsPaymentRequest) (*VirtualPaymentParams, error) {

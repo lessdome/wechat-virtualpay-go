@@ -1,6 +1,7 @@
 package wechat_virtualpay_go
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -149,4 +150,38 @@ func TestGoodsValidation(t *testing.T) {
 	if _, err := BuildGoodsPayment("o", "", ok); err == nil || !strings.Contains(err.Error(), "appKey") {
 		t.Errorf("appKey 为空应当报错: %v", err)
 	}
+}
+
+// 端到端：signature 必须是用 Code2Session **生成出来的** SessionKey 算的。
+// 这条把「换登录态」与「拼下单参数」两步接起来验一次。
+func TestGoodsUsesGeneratedSessionKey(t *testing.T) {
+	rt := &sessionRT{body: `{"openid":"o1","session_key":"generated-kk"}`}
+	swapClient(t, rt)
+
+	sess, err := Code2Session(context.Background(), "appid", "secret", "logincode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.SessionKey != "generated-kk" {
+		t.Fatalf("换来的 session_key 不对: %+v", sess)
+	}
+
+	p, err := BuildGoodsPayment("offerX", "appKey1", GoodsPaymentRequest{
+		ProductID:  "p1",
+		GoodsPrice: 100,
+		OutTradeNo: "ORDER20260101",
+		Attach:     "a",
+		SessionKey: sess.SessionKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mac := hmac.New(sha256.New, []byte("generated-kk"))
+	mac.Write([]byte(p.SignData))
+	if want := hex.EncodeToString(mac.Sum(nil)); p.Signature != want {
+		t.Fatalf("signature 不是用生成出来的 session_key 算的（got %s want %s）", p.Signature, want)
+	}
+	t.Logf("signData:  %s", p.SignData)
+	t.Logf("signature: %s（用 Code2Session 换来的 session_key 算出）", p.Signature)
 }
