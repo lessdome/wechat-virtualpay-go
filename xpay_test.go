@@ -497,7 +497,7 @@ func TestHTTPErrorIsPlainError(t *testing.T) {
 // ——碰 nil 响应立刻 panic；要是返回值类型，他会拿到一个 errcode=0 的零值响应，而那恰好
 // 是本包契约里「成功」的样子，一路静默错下去。
 //
-// 25 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
+// 33 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
 // 参数没过本地校验（一个字节都没发出去）、非 200、网络失败。
 func TestErrorReturnsNilResponse(t *testing.T) {
 	provided := true
@@ -631,6 +631,49 @@ func TestErrorReturnsNilResponse(t *testing.T) {
 		"DownloadAdverFundsOrder": func(tk string) (bool, error) {
 			r, err := DownloadAdverFundsOrder(context.Background(), tk,
 				DownloadAdverFundsOrderRequest{FundID: "F1"})
+			return r == nil, err
+		},
+		// 投诉类 8 个。其中 get_upload_file_sign 与 query_punishment_reasons 是**同一批里
+		// 两种少见的形态**：前者路径上没有任何变量、后者压根没有请求体，这里顺带把
+		// 「没有请求体也照样要有响应类型」钉住。
+		"GetComplaintList": func(tk string) (bool, error) {
+			r, err := GetComplaintList(context.Background(), tk, "K", GetComplaintListRequest{
+				BeginDate: "2026-01-01", EndDate: "2026-01-31", Limit: 20})
+			return r == nil, err
+		},
+		"GetComplaintDetail": func(tk string) (bool, error) {
+			r, err := GetComplaintDetail(context.Background(), tk, "K",
+				GetComplaintDetailRequest{ComplaintID: "C1"})
+			return r == nil, err
+		},
+		"GetNegotiationHistory": func(tk string) (bool, error) {
+			r, err := GetNegotiationHistory(context.Background(), tk, "K",
+				GetNegotiationHistoryRequest{ComplaintID: "C1", Limit: 10})
+			return r == nil, err
+		},
+		"ResponseComplaint": func(tk string) (bool, error) {
+			r, err := ResponseComplaint(context.Background(), tk, "K", ResponseComplaintRequest{
+				ComplaintID: "C1", ResponseContent: "已处理"})
+			return r == nil, err
+		},
+		"CompleteComplaint": func(tk string) (bool, error) {
+			r, err := CompleteComplaint(context.Background(), tk, "K",
+				CompleteComplaintRequest{ComplaintID: "C1"})
+			return r == nil, err
+		},
+		"UploadVPFile": func(tk string) (bool, error) {
+			r, err := UploadVPFile(context.Background(), tk, "K",
+				UploadVPFileRequest{Base64Img: "AAAA", FileName: "a.png"})
+			return r == nil, err
+		},
+		"GetUploadFileSign": func(tk string) (bool, error) {
+			r, err := GetUploadFileSign(context.Background(), tk, "K", GetUploadFileSignRequest{
+				WxpayURL:    "https://api.mch.weixin.qq.com/v3/merchant-service/images/x",
+				ComplaintID: "C1"})
+			return r == nil, err
+		},
+		"QueryPunishmentReasons": func(tk string) (bool, error) {
+			r, err := QueryPunishmentReasons(context.Background(), tk, "K")
 			return r == nil, err
 		},
 	}
