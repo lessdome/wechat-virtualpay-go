@@ -20,7 +20,7 @@ import (
 // 测试把「文档里写的」和「代码里的」绑在一起，让漂移在 `go test` 里就现形。
 //
 // 这组测试读文件系统（os.ReadFile / go/parser），是本仓库唯一这么做的测试。os 与 go/* 都是
-// 标准库，不破「零第三方依赖」这条线。
+// 标准库，不破「零第三方依赖」这条线——那条承诺本身也由这里的 TestNoThirdPartyDeps 守着。
 
 const (
 	readmePath = "README.md"
@@ -291,6 +291,32 @@ func TestReadmeNamesExist(t *testing.T) {
 					t.Errorf("%s:%d 点了 `%s`，但包里没有这个名字（函数/类型/常量/变量/字段都没有）",
 						name, i+1, token)
 				}
+			}
+		}
+	}
+}
+
+// TestNoThirdPartyDeps 守着本包对外的另一条核心承诺：**零第三方依赖，只用标准库**。
+//
+// 这条承诺写在 README 与 doc.go 的第一段里，此前却只靠自觉：谁 import 一个第三方包、
+// 跑一次 go mod tidy，go.mod 里就多出一行 require，而没有任何东西会报红——文档里那句
+// 「零依赖」就悄悄变成假话了。
+//
+// 判定很直接：go.mod 里不该出现 require。没有去解析 go.sum——零依赖的模块压根不会有
+// go.sum，它一旦出现必然是上面那行 require 的**结果**，不是独立信号。replace 也一并
+// 挡掉：能 replace 的东西必然是被依赖的东西。
+func TestNoThirdPartyDeps(t *testing.T) {
+	body := readFile(t, "go.mod")
+	for i, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		for _, kw := range []string{"require", "replace", "exclude", "retract"} {
+			// 既认单行的 `require x v1`，也认块开头的 `require (`。
+			if trimmed == kw || strings.HasPrefix(trimmed, kw+" ") || strings.HasPrefix(trimmed, kw+"(") {
+				t.Errorf("go.mod:%d 出现了 %s（%q）——本包承诺零第三方依赖，只用标准库",
+					i+1, kw, trimmed)
 			}
 		}
 	}
