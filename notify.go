@@ -141,7 +141,11 @@ type GoodsDeliverNotify struct {
 	OpenID string `json:"OpenId"`
 	// OutTradeNo 业务订单号。
 	OutTradeNo string `json:"OutTradeNo"`
-	// Env 环境标识。本包只支持现网，恒为 0。
+	// Env 环境标识。这是**微信原样回**的，不是本包填的——本包不解读、不过滤。
+	//
+	// ⚠️ 它的**值域官方字段表没写**（表里只给了字段名和 int）。所以别拿它跟请求体的
+	// Env 直接比：本包这边已经有两套并存的编码——请求体是 0=现网 / 1=沙箱，响应里的
+	// OrderEnvType 是 1=现网 / 2=沙箱。这个字段属哪一套，要真机联调才敢定。
 	Env int `json:"Env"`
 	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
 	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo"`
@@ -158,7 +162,11 @@ type CoinPayNotify struct {
 	OpenID string `json:"OpenId"`
 	// OutTradeNo 业务订单号。
 	OutTradeNo string `json:"OutTradeNo"`
-	// Env 环境标识。本包只支持现网，恒为 0。
+	// Env 环境标识。这是**微信原样回**的，不是本包填的——本包不解读、不过滤。
+	//
+	// ⚠️ 它的**值域官方字段表没写**（表里只给了字段名和 int）。所以别拿它跟请求体的
+	// Env 直接比：本包这边已经有两套并存的编码——请求体是 0=现网 / 1=沙箱，响应里的
+	// OrderEnvType 是 1=现网 / 2=沙箱。这个字段属哪一套，要真机联调才敢定。
 	Env int `json:"Env"`
 	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
 	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo"`
@@ -291,8 +299,13 @@ type IOSRefundQueryNotify struct {
 
 // ParseNotification 解析一次推送：读请求体 → 验签 → 识别事件 → 反序列化为对应结构。
 //
-// token 是 MP 后台「开发管理 → 消息推送配置」里的 **Token 令牌**——不是支付凭据，
-// 也别和 AppKey 搞混。
+// 入参：
+//
+//	token  MP 后台「开发管理 → 消息推送配置」里的 **Token 令牌**——不是支付凭据，也别和
+//	       AppKey、AppSecret 搞混，三者互不通用。必填。
+//	r      微信推过来的那一次 HTTP 请求（handler 里的 *http.Request）。本方法会读它的
+//	       body（**上限 1 MiB**，超了报错）与 URL 上的 timestamp / nonce / signature；
+//	       只读不写，应答由调用方自己写。
 //
 // 只支持 **JSON 报文 + 明文模式**：MP 后台「消息推送配置」里两项都要配对——数据格式
 // 选 JSON、消息加解密方式选明文。配成 XML 或安全模式，推送都会被拒，本方法会直接

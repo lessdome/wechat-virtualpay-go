@@ -28,19 +28,33 @@ func hmacSHA256Hex(key, message string) string {
 
 // CalcPaySig 计算支付签名 pay_sig。
 //
-// uri **不带** "?" 及其后的部分：pay_sig 的签名原文是 uri + "&" + signData，
-// uri 带上 query string 会让签名与微信侧不一致（服务端报 268490003）。
+// 入参：
 //
-// signData 必须与实际下发/发送的字符串**字节级一致**：这里算的是字节，微信校验的
-// 也是字节，中间任何一次重新序列化（换了字段顺序、多了转义）都会让两边对不上。
+//	appKey    商家密钥（商户后台里那把）。**必须与被签内容的环境配套**：env=0 的订单配
+//	          现网 AppKey、env=1 的配沙箱 AppKey，两把不能混。
+//	uri       签名原文里 uri 那一段，**不带** "?" 及其后的部分。拉起支付时固定
+//	          "requestVirtualPayment"，调服务端接口时是接口路径（如 "/xpay/query_order"）。
+//	          带上 query string 会让签名与微信侧不一致（服务端报 268490003）。
+//	signData  被签名的原文：下单时是完整的 signData 字符串，调接口时是请求体。它必须与
+//	          实际下发/发送的字符串**字节级一致**——这里算的是字节，微信校验的也是字节，
+//	          中间任何一次重新序列化（换了字段顺序、多了转义）都会让两边对不上。
+//
+// 多数调用方不用直接调它：BuildPayment 与 PostWithPaySig 内部已经算了。
 func CalcPaySig(appKey, uri, signData string) string {
 	return hmacSHA256Hex(appKey, uri+"&"+signData)
 }
 
 // CalcSignature 计算用户态签名 signature。
 //
-// 与 pay_sig 不同，它**不带** uri 前缀。sessionKey 由 wx.login 的 code 通过
-// code2Session 换取，会过期（服务端报 268490009）。
+// 与 pay_sig 的唯一区别是**不拼 uri 前缀**（公式见文件头）。
+//
+// 入参：
+//
+//	sessionKey  用户会话密钥，由 wx.login 的 code 经 Code2Session 换取。它是**会话级**的、
+//	            会过期——过期后服务端报 268490009、客户端报 -15007，届时让前端重新 wx.login。
+//	signData    被签名的原文，与 CalcPaySig 同样是「字节级一致」的要求。
+//
+// 多数调用方不用直接调它：BuildPayment 与 PostWithUserSig 内部已经算了。
 func CalcSignature(sessionKey, signData string) string {
 	return hmacSHA256Hex(sessionKey, signData)
 }
