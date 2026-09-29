@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -196,14 +196,14 @@ type Complaint struct {
 func checkDay10Range(begin, end string) error {
 	b, err := time.Parse("2006-01-02", begin)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: BeginDate %q 不是合法的 yyyy-mm-dd 日期（要 2023-01-01 这样的两位写法）", begin)
+		return fmt.Errorf("wechat_virtualpay: BeginDate %q 不是合法的 yyyy-mm-dd 日期（要 2023-01-01 这样的两位写法）", begin)
 	}
 	e, err := time.Parse("2006-01-02", end)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: EndDate %q 不是合法的 yyyy-mm-dd 日期（要 2023-01-01 这样的两位写法）", end)
+		return fmt.Errorf("wechat_virtualpay: EndDate %q 不是合法的 yyyy-mm-dd 日期（要 2023-01-01 这样的两位写法）", end)
 	}
 	if e.Before(b) {
-		return fmt.Errorf("wechat_virtualpay_go: EndDate(%s) 早于 BeginDate(%s)", end, begin)
+		return fmt.Errorf("wechat_virtualpay: EndDate(%s) 早于 BeginDate(%s)", end, begin)
 	}
 	return nil
 }
@@ -215,10 +215,10 @@ func checkDay10Range(begin, end string) error {
 // 都在本地拦——若实测官方把 0 当默认值，去掉这一条即可。
 func checkLimitOffset(offset, limit int) error {
 	if offset < 0 {
-		return fmt.Errorf("wechat_virtualpay_go: Offset %d 非法，官方写明从 0 开始", offset)
+		return fmt.Errorf("wechat_virtualpay: Offset %d 非法，官方写明从 0 开始", offset)
 	}
 	if limit < 1 {
-		return fmt.Errorf("wechat_virtualpay_go: Limit %d 非法，官方写的是「最多返回条数」（至少 1 条）", limit)
+		return fmt.Errorf("wechat_virtualpay: Limit %d 非法，官方写的是「最多返回条数」（至少 1 条）", limit)
 	}
 	return nil
 }
@@ -228,7 +228,7 @@ func checkLimitOffset(offset, limit int) error {
 // 只查非空：官方没给这个 ID 的字符集与长度（它是微信生成的），本包不发明格式。
 func checkComplaintID(id string) error {
 	if id == "" {
-		return fmt.Errorf("wechat_virtualpay_go: ComplaintID 不能为空（来自 GetComplaintList/GetComplaintDetail）")
+		return fmt.Errorf("wechat_virtualpay: ComplaintID 不能为空（来自 GetComplaintList/GetComplaintDetail）")
 	}
 	return nil
 }
@@ -524,7 +524,7 @@ func (r ResponseComplaintRequest) validate() error {
 	// 文字与图片**至少有一样**：两样都空的「回复」在用户端什么也看不到，等于没回。
 	// （这条是从语义推的，官方没写「二者不可同时为空」。）
 	if r.ResponseContent == "" && len(r.ResponseImages) == 0 {
-		return fmt.Errorf("wechat_virtualpay_go: ResponseContent 与 ResponseImages 至少要有一个——空的回复在用户端看不到任何东西")
+		return fmt.Errorf("wechat_virtualpay: ResponseContent 与 ResponseImages 至少要有一个——空的回复在用户端看不到任何东西")
 	}
 	return nil
 }
@@ -657,10 +657,10 @@ type UploadVPFileRequest struct {
 
 func (r UploadVPFileRequest) validate() error {
 	if r.Base64Img == "" && r.ImgURL == "" {
-		return fmt.Errorf("wechat_virtualpay_go: Base64Img 与 ImgURL 至少要有一个（官方：二选一，ImgURL 优先）")
+		return fmt.Errorf("wechat_virtualpay: Base64Img 与 ImgURL 至少要有一个（官方：二选一，ImgURL 优先）")
 	}
 	if r.FileName == "" {
-		return fmt.Errorf("wechat_virtualpay_go: FileName 不能为空")
+		return fmt.Errorf("wechat_virtualpay: FileName 不能为空")
 	}
 	return nil
 }
@@ -731,7 +731,7 @@ type GetUploadFileSignRequest struct {
 
 func (r GetUploadFileSignRequest) validate() error {
 	if r.WxpayURL == "" {
-		return fmt.Errorf("wechat_virtualpay_go: WxpayURL 不能为空（来自投诉详情里的图片地址）")
+		return fmt.Errorf("wechat_virtualpay: WxpayURL 不能为空（来自投诉详情里的图片地址）")
 	}
 	return checkComplaintID(r.ComplaintID)
 }

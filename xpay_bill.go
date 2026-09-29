@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -44,14 +44,14 @@ import (
 func checkMonthRange(start, end string) error {
 	s, err := time.Parse("200601", start)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: StartMonth %q 不是合法的 YYYYMM 月份", start)
+		return fmt.Errorf("wechat_virtualpay: StartMonth %q 不是合法的 YYYYMM 月份", start)
 	}
 	e, err := time.Parse("200601", end)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: EndMonth %q 不是合法的 YYYYMM 月份", end)
+		return fmt.Errorf("wechat_virtualpay: EndMonth %q 不是合法的 YYYYMM 月份", end)
 	}
 	if e.Before(s) {
-		return fmt.Errorf("wechat_virtualpay_go: EndMonth(%s) 早于 StartMonth(%s)", end, start)
+		return fmt.Errorf("wechat_virtualpay: EndMonth(%s) 早于 StartMonth(%s)", end, start)
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package wechat_virtualpay_go_test
+package wechat_virtualpay_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	wechat_virtualpay_go "github.com/lessdome/wechat_virtualpay_go"
+	"github.com/lessdome/wechat_virtualpay"
 )
 
 // ExampleBuildPayment 是下单参数生成的最小可运行示例。
@@ -23,12 +23,12 @@ import (
 // 这里用固定的 outTradeNo 而不是 NewOutTradeNo()：后者带随机数，输出钉不住。
 // 真实代码应当用 NewOutTradeNo() 或自己业务的单号（每单只能用一次）。
 func ExampleBuildPayment() {
-	p, err := wechat_virtualpay_go.BuildPayment(
+	p, err := wechat_virtualpay.BuildPayment(
 		"123",           // offerID：虚拟支付商户号
 		"appkey",        // appKey：商家密钥，用来算 pay_sig
 		"a-session-key", // sessionKey：用户密钥，用来算 signature（真实代码用 Code2Session 换）
-		wechat_virtualpay_go.PaymentRequest{
-			Mode:       wechat_virtualpay_go.ModeShortSeriesGoods,
+		wechat_virtualpay.PaymentRequest{
+			Mode:       wechat_virtualpay.ModeShortSeriesGoods,
 			ProductID:  "testproductId",
 			GoodsPrice: 10,
 			Quantity:   1,
@@ -58,7 +58,7 @@ func ExampleParseNotification() {
 	// 参数取自官方《消息推送》页的样例一。
 	r := signedRequest(token, "1714036504", "1514711492", body)
 
-	notif, err := wechat_virtualpay_go.ParseNotification(
+	notif, err := wechat_virtualpay.ParseNotification(
 		token, // MP 后台「消息推送配置」里的 Token 令牌（不是 AppKey）
 		r)     // 微信推过来的这次请求；body 与 URL 上的 timestamp/nonce/signature 都会被读
 	if err != nil {
@@ -67,9 +67,9 @@ func ExampleParseNotification() {
 		return
 	}
 
-	ack := wechat_virtualpay_go.Ack{ErrCode: 0, ErrMsg: "success"}
+	ack := wechat_virtualpay.Ack{ErrCode: 0, ErrMsg: "success"}
 	switch notif.Event {
-	case wechat_virtualpay_go.EventGoodsDeliver:
+	case wechat_virtualpay.EventGoodsDeliver:
 		// 幂等键是平台单号 WeChatPayInfo.MchOrderNo；它可能为 nil，取值前先判空。
 		if notif.GoodsDeliver.WeChatPayInfo != nil {
 			fmt.Println("deliver:", notif.GoodsDeliver.WeChatPayInfo.MchOrderNo)
@@ -104,11 +104,11 @@ func signedRequest(token, ts, nonce, body string) *http.Request {
 // 导出的 API——`resp.ErrCode`/`resp.Order` 这套到底能不能从包外读，内嵌的未导出字段会不会
 // 提升出来，这种事只有外部包能证明。
 func ExampleQueryOrder() {
-	resp, err := wechat_virtualpay_go.QueryOrder(
+	resp, err := wechat_virtualpay.QueryOrder(
 		context.Background(), // ctx：超时与取消由它管
 		"ACCESS_TOKEN",       // accessToken：调用凭证（GetStableAccessToken 换来的）
 		"APP_KEY",            // appKey：商家密钥，算 pay_sig；必须与请求体 env 配套
-		wechat_virtualpay_go.QueryOrderRequest{
+		wechat_virtualpay.QueryOrderRequest{
 			OpenID:  "oXXXX",
 			OrderID: "order_1",
 		})
@@ -141,7 +141,7 @@ func ExampleGetStableAccessToken() {
 
 	// 1. 换号。真实代码里应该缓存起来（有效期见 resp.ExpiresIn，留 5 分钟余量再换），
 	//    别每次调用都换一把——虽然普通模式下重复调用不会换新号，但白花配额。
-	tok, err := wechat_virtualpay_go.GetStableAccessToken(
+	tok, err := wechat_virtualpay.GetStableAccessToken(
 		ctx,         // ctx：超时与取消由它管
 		"wxAPPID",   // appID
 		"APPSECRET", // appSecret
@@ -156,10 +156,10 @@ func ExampleGetStableAccessToken() {
 	}
 
 	// 2. 用号。它只是个字符串参数，与用户级的 session_key 无关。
-	resp, err := wechat_virtualpay_go.QueryOrder(ctx,
+	resp, err := wechat_virtualpay.QueryOrder(ctx,
 		tok.AccessToken, // accessToken：上一步换来的凭证，原样传进来
 		"APP_KEY",       // appKey：商家密钥，算 pay_sig
-		wechat_virtualpay_go.QueryOrderRequest{OpenID: "oXXXX", OrderID: "order_1"})
+		wechat_virtualpay.QueryOrderRequest{OpenID: "oXXXX", OrderID: "order_1"})
 	if err != nil {
 		panic(err)
 	}
@@ -202,12 +202,12 @@ func ExampleGetStableAccessToken() {
 func ExamplePostWithUserSig() {
 	// 自己的响应结构体：公共头 + 这个接口自己的字段（按官方返回参数表写）。
 	type BalanceResponse struct {
-		wechat_virtualpay_go.ResponseHeader
+		wechat_virtualpay.ResponseHeader
 		Balance int `json:"balance"`
 	}
 
 	var resp BalanceResponse
-	err := wechat_virtualpay_go.PostWithUserSig(context.Background(),
+	err := wechat_virtualpay.PostWithUserSig(context.Background(),
 		"ACCESS_TOKEN", // 调用凭证
 		"APP_KEY",      // 商家那把钥匙，签 pay_sig
 		"SESSION_KEY",  // 用户那把钥匙（code2Session 换来的 session_key），签 signature

@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"bytes"
@@ -89,7 +89,7 @@ var xpayHTTPClient = &http.Client{Timeout: 15 * time.Second}
 // （约束见 xpayResponse）：
 //
 //	type BalanceResponse struct {
-//		wechat_virtualpay_go.ResponseHeader
+//		wechat_virtualpay.ResponseHeader
 //		Balance int `json:"balance"`
 //	}
 //
@@ -149,7 +149,7 @@ type xpayNoEnvRequest interface{ xpayNoEnv() }
 func requestBody(req any) ([]byte, error) {
 	raw, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化请求体失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: 序列化请求体失败: %w", err)
 	}
 
 	var obj map[string]json.RawMessage
@@ -159,7 +159,7 @@ func requestBody(req any) ([]byte, error) {
 		//
 		// 这一步刻意排在下面那个例外**之前**：声明了「不带 env」不代表可以不讲形状，
 		// 那个例外只是不补字段，不是不再检查请求体。
-		return nil, fmt.Errorf("wechat_virtualpay_go: 请求体不是 JSON 对象: %s", raw)
+		return nil, fmt.Errorf("wechat_virtualpay: 请求体不是 JSON 对象: %s", raw)
 	}
 	if _, ok := req.(xpayNoEnvRequest); ok {
 		return raw, nil // 显式声明了不带 env：原样发，不补也不重排
@@ -171,7 +171,7 @@ func requestBody(req any) ([]byte, error) {
 	obj["env"] = json.RawMessage("0")
 	out, err := json.Marshal(obj)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化请求体失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: 序列化请求体失败: %w", err)
 	}
 	return out, nil
 }
@@ -287,13 +287,13 @@ func paySigQuery(appKey, uri string, raw []byte) url.Values {
 // 前两条是拼错的地址，第三条是拼错的签名原文；都不该等到微信回一个跟原因无关的错误码。
 func checkURI(uri string) error {
 	if uri == "" {
-		return fmt.Errorf("wechat_virtualpay_go: uri 不能为空，形如 \"/xpay/query_order\"")
+		return fmt.Errorf("wechat_virtualpay: uri 不能为空，形如 \"/xpay/query_order\"")
 	}
 	if !strings.HasPrefix(uri, "/") {
-		return fmt.Errorf("wechat_virtualpay_go: uri %q 必须以 \"/\" 开头（它是拼在 %s 后面的路径）", uri, xpayAPIBase)
+		return fmt.Errorf("wechat_virtualpay: uri %q 必须以 \"/\" 开头（它是拼在 %s 后面的路径）", uri, xpayAPIBase)
 	}
 	if i := strings.IndexAny(uri, "?#"); i >= 0 {
-		return fmt.Errorf("wechat_virtualpay_go: uri %q 不能含 %q——路径只到接口名为止，query 由本包自己拼（带着它签名也会算错）",
+		return fmt.Errorf("wechat_virtualpay: uri %q 不能含 %q——路径只到接口名为止，query 由本包自己拼（带着它签名也会算错）",
 			uri, uri[i:i+1])
 	}
 	return nil
@@ -328,7 +328,7 @@ func xpaySend[T xpayResponse](ctx context.Context, accessToken, uri string, raw 
 	if err != nil {
 		// 这里也会走 url.Error：uri 由调用方传，带个控制字符就能让 url.Parse 失败，而它的
 		// 文案里同样有整个 URL（含 access_token）。所以这条路径也要摘。
-		return fmt.Errorf("wechat_virtualpay_go: %s 构造请求失败: %w", uri, stripURLError(err))
+		return fmt.Errorf("wechat_virtualpay: %s 构造请求失败: %w", uri, stripURLError(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -337,18 +337,18 @@ func xpaySend[T xpayResponse](ctx context.Context, accessToken, uri string, raw 
 		// 连不上/超时：先摘掉 URL（它带着 access_token，见 stripURLError），再用 %w 挂住
 		// 内层错误——errors.Is(err, context.DeadlineExceeded) 照样能用。是不是超时是调用方
 		// 重试策略要用的**值**，不能只留在文案里。
-		return fmt.Errorf("wechat_virtualpay_go: %s 请求失败: %w", uri, stripURLError(err))
+		return fmt.Errorf("wechat_virtualpay: %s 请求失败: %w", uri, stripURLError(err))
 	}
 	defer resp.Body.Close()
 
 	rawResp, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: %s 读取响应失败: %w", uri, err)
+		return fmt.Errorf("wechat_virtualpay: %s 读取响应失败: %w", uri, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		// 非 200 的时候响应体不是微信的报文，也就没有 errcode 可给——状态码只能进文案。
 		// 原始响应一并带上：网关的 502 页面里常常写着真正的原因。
-		return fmt.Errorf("wechat_virtualpay_go: %s 返回 HTTP %d %s（原始响应: %s）",
+		return fmt.Errorf("wechat_virtualpay: %s 返回 HTTP %d %s（原始响应: %s）",
 			uri, resp.StatusCode, http.StatusText(resp.StatusCode), rawResp)
 	}
 
@@ -358,7 +358,7 @@ func xpaySend[T xpayResponse](ctx context.Context, accessToken, uri string, raw 
 	if err := json.Unmarshal(rawResp, out); err != nil {
 		// 业务失败**不会**走到这里：微信的错误响应也是合法 JSON，会被正常解析进 out
 		// （errcode/errmsg 就在里面）。走到这里说明响应根本不是微信的报文。
-		return fmt.Errorf("wechat_virtualpay_go: %s 解析响应失败: %w（原始响应: %s）", uri, err, rawResp)
+		return fmt.Errorf("wechat_virtualpay: %s 解析响应失败: %w（原始响应: %s）", uri, err, rawResp)
 	}
 	return nil
 }

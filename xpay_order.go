@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -55,9 +55,9 @@ import (
 func checkOrderRef(orderID, wxOrderID string) error {
 	switch {
 	case orderID == "" && wxOrderID == "":
-		return fmt.Errorf("wechat_virtualpay_go: OrderID 与 WxOrderID 必须二选一，当前两个都为空")
+		return fmt.Errorf("wechat_virtualpay: OrderID 与 WxOrderID 必须二选一，当前两个都为空")
 	case orderID != "" && wxOrderID != "":
-		return fmt.Errorf("wechat_virtualpay_go: OrderID 与 WxOrderID 只能传一个，当前两个都传了")
+		return fmt.Errorf("wechat_virtualpay: OrderID 与 WxOrderID 只能传一个，当前两个都传了")
 	}
 	return nil
 }
@@ -198,7 +198,7 @@ type QueryOrderRequest struct {
 
 func (r QueryOrderRequest) validate() error {
 	if r.OpenID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OpenID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OpenID 不能为空")
 	}
 	return checkOrderRef(r.OrderID, r.WxOrderID)
 }
@@ -364,26 +364,26 @@ func (r RefundFrom) valid() bool {
 
 func (r RefundOrderRequest) validate() error {
 	if r.OpenID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OpenID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OpenID 不能为空")
 	}
 	if err := checkOrderRef(r.OrderID, r.WxOrderID); err != nil {
 		return err
 	}
 	if !refundOrderIDRe.MatchString(r.RefundOrderID) {
-		return fmt.Errorf("wechat_virtualpay_go: RefundOrderID %q 非法，须为 8–32 位字母/数字/_/-", r.RefundOrderID)
+		return fmt.Errorf("wechat_virtualpay: RefundOrderID %q 非法，须为 8–32 位字母/数字/_/-", r.RefundOrderID)
 	}
 	// LeftFee 不能自己算，要从 QueryOrder 拿微信侧记的剩余可退金额。
 	if r.LeftFee <= 0 {
-		return fmt.Errorf("wechat_virtualpay_go: LeftFee 必须大于 0（用 QueryOrder 取 order.left_fee，不要自己算）")
+		return fmt.Errorf("wechat_virtualpay: LeftFee 必须大于 0（用 QueryOrder 取 order.left_fee，不要自己算）")
 	}
 	if r.RefundFee <= 0 || r.RefundFee > r.LeftFee {
-		return fmt.Errorf("wechat_virtualpay_go: RefundFee（%d 分）须落在 (0, LeftFee(%d 分)] 区间内", r.RefundFee, r.LeftFee)
+		return fmt.Errorf("wechat_virtualpay: RefundFee（%d 分）须落在 (0, LeftFee(%d 分)] 区间内", r.RefundFee, r.LeftFee)
 	}
 	if !r.RefundReason.valid() {
-		return fmt.Errorf("wechat_virtualpay_go: RefundReason %q 非法，取值见 RefundReason 常量", r.RefundReason)
+		return fmt.Errorf("wechat_virtualpay: RefundReason %q 非法，取值见 RefundReason 常量", r.RefundReason)
 	}
 	if !r.RefundFrom.valid() {
-		return fmt.Errorf("wechat_virtualpay_go: RefundFrom %q 非法，取值见 RefundFrom 常量", r.RefundFrom)
+		return fmt.Errorf("wechat_virtualpay: RefundFrom %q 非法，取值见 RefundFrom 常量", r.RefundFrom)
 	}
 	return nil
 }
@@ -634,7 +634,7 @@ func checkDateRange(begin, end int64) error {
 	e, _ := parseDay8(end)
 	// 边界按「含」处理：20260420 到 20260521 算 31 天，放行。
 	if days := int(e.Sub(b).Hours() / 24); days > 31 {
-		return fmt.Errorf("wechat_virtualpay_go: BeginDs 与 EndDs 相隔 %d 天，官方上限是 31 天", days)
+		return fmt.Errorf("wechat_virtualpay: BeginDs 与 EndDs 相隔 %d 天，官方上限是 31 天", days)
 	}
 	return nil
 }
@@ -644,23 +644,23 @@ func (r StartDownloadOrderRequest) validate() error {
 		return err
 	}
 	if !r.OrderType.valid() {
-		return fmt.Errorf("wechat_virtualpay_go: OrderType %d 非法，取值见 DownloadOrderType 常量", int(r.OrderType))
+		return fmt.Errorf("wechat_virtualpay: OrderType %d 非法，取值见 DownloadOrderType 常量", int(r.OrderType))
 	}
 	// 道具(2)和会员订阅(3)才有「发没发货」的概念，官方要求必须显式指定；其余类型没有。
 	// 不传会被默认成 true——那会把「只想筛未发货」悄悄变成「筛已发货」。
 	if r.IsProvided == nil && (r.OrderType == DownloadOrderGoods || r.OrderType == DownloadOrderSubscription) {
-		return fmt.Errorf("wechat_virtualpay_go: OrderType=%d 时必须传 IsProvided（不传按 true 处理）", int(r.OrderType))
+		return fmt.Errorf("wechat_virtualpay: OrderType=%d 时必须传 IsProvided（不传按 true 处理）", int(r.OrderType))
 	}
 	// 退款状态只在下载退款订单时有意义。传了就不该被静默忽略——那会让人以为筛生效了。
 	if r.RefundStatus != RefundStatusFilterAll && r.OrderType != DownloadOrderRefund {
-		return fmt.Errorf("wechat_virtualpay_go: RefundStatus 只在 OrderType=%d（退款订单）时有意义，当前 OrderType=%d",
+		return fmt.Errorf("wechat_virtualpay: RefundStatus 只在 OrderType=%d（退款订单）时有意义，当前 OrderType=%d",
 			int(DownloadOrderRefund), int(r.OrderType))
 	}
 	if !r.RefundStatus.valid() {
-		return fmt.Errorf("wechat_virtualpay_go: RefundStatus %d 非法，取值见 RefundStatusFilter 常量", int(r.RefundStatus))
+		return fmt.Errorf("wechat_virtualpay: RefundStatus %d 非法，取值见 RefundStatusFilter 常量", int(r.RefundStatus))
 	}
 	if !r.PayChannel.valid() {
-		return fmt.Errorf("wechat_virtualpay_go: PayChannel %d 非法，取值见 PayChannel 常量", int(r.PayChannel))
+		return fmt.Errorf("wechat_virtualpay: PayChannel %d 非法，取值见 PayChannel 常量", int(r.PayChannel))
 	}
 	return nil
 }
@@ -742,7 +742,7 @@ type QueryDownloadOrderResponse struct {
 
 func (r QueryDownloadOrderRequest) validate() error {
 	if r.TaskID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: TaskID 不能为空（由 StartDownloadOrder 返回）")
+		return fmt.Errorf("wechat_virtualpay: TaskID 不能为空（由 StartDownloadOrder 返回）")
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -47,7 +47,7 @@ import (
 // what 是「这一趟在做什么」（扣减/退款/赠送），让报错能指回是哪个接口。
 func checkCoinAmount(amount int64, what string) error {
 	if amount <= 0 {
-		return fmt.Errorf("wechat_virtualpay_go: Amount 必须大于 0（%s的代币数量，0 与负数都没有含义）", what)
+		return fmt.Errorf("wechat_virtualpay: Amount 必须大于 0（%s的代币数量，0 与负数都没有含义）", what)
 	}
 	return nil
 }
@@ -72,10 +72,10 @@ type QueryUserBalanceRequest struct {
 
 func (r QueryUserBalanceRequest) validate() error {
 	if r.OpenID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OpenID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OpenID 不能为空")
 	}
 	if r.UserIP == "" {
-		return fmt.Errorf("wechat_virtualpay_go: UserIP 不能为空（官方标必填，形如 1.1.1.1）")
+		return fmt.Errorf("wechat_virtualpay: UserIP 不能为空（官方标必填，形如 1.1.1.1）")
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ func MarshalPayItems(items ...PayItem) (string, error) {
 	}
 	raw, err := json.Marshal(items)
 	if err != nil {
-		return "", fmt.Errorf("wechat_virtualpay_go: 序列化 payitem 失败: %w", err)
+		return "", fmt.Errorf("wechat_virtualpay: 序列化 payitem 失败: %w", err)
 	}
 	return string(raw), nil
 }
@@ -238,13 +238,13 @@ type CurrencyPayRequest struct {
 
 func (r CurrencyPayRequest) validate() error {
 	if r.OpenID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OpenID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OpenID 不能为空")
 	}
 	if r.UserIP == "" {
-		return fmt.Errorf("wechat_virtualpay_go: UserIP 不能为空（官方标必填，形如 1.1.1.1）")
+		return fmt.Errorf("wechat_virtualpay: UserIP 不能为空（官方标必填，形如 1.1.1.1）")
 	}
 	if r.OrderID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OrderID 不能为空（本单在你这边的业务单号，退款时要拿它当 PayOrderID 传回来）")
+		return fmt.Errorf("wechat_virtualpay: OrderID 不能为空（本单在你这边的业务单号，退款时要拿它当 PayOrderID 传回来）")
 	}
 	return checkCoinAmount(r.Amount, "要扣减")
 }
@@ -331,16 +331,16 @@ type CancelCurrencyPayRequest struct {
 
 func (r CancelCurrencyPayRequest) validate() error {
 	if r.OpenID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OpenID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OpenID 不能为空")
 	}
 	if r.UserIP == "" {
-		return fmt.Errorf("wechat_virtualpay_go: UserIP 不能为空（官方标必填，形如 1.1.1.1）")
+		return fmt.Errorf("wechat_virtualpay: UserIP 不能为空（官方标必填，形如 1.1.1.1）")
 	}
 	if r.PayOrderID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: PayOrderID 不能为空（原代币支付单号，即 CurrencyPay 时传的 OrderID）")
+		return fmt.Errorf("wechat_virtualpay: PayOrderID 不能为空（原代币支付单号，即 CurrencyPay 时传的 OrderID）")
 	}
 	if r.OrderID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OrderID 不能为空（本次退款单的单号，与原单 PayOrderID 不是一回事）")
+		return fmt.Errorf("wechat_virtualpay: OrderID 不能为空（本次退款单的单号，与原单 PayOrderID 不是一回事）")
 	}
 	return checkCoinAmount(r.Amount, "要退款")
 }
@@ -419,10 +419,10 @@ type PresentCurrencyRequest struct {
 
 func (r PresentCurrencyRequest) validate() error {
 	if r.OpenID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OpenID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OpenID 不能为空")
 	}
 	if r.OrderID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OrderID 不能为空（赠送单号，重试要复用同一个）")
+		return fmt.Errorf("wechat_virtualpay: OrderID 不能为空（赠送单号，重试要复用同一个）")
 	}
 	return checkCoinAmount(r.Amount, "要赠送")
 }

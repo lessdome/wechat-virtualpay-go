@@ -1,4 +1,4 @@
-// Package wechat_virtualpay_go 是微信小程序「虚拟支付」的服务端 Go SDK。
+// Package wechat_virtualpay 是微信小程序「虚拟支付」的服务端 Go SDK。
 //
 // 它覆盖 33 个 /xpay/* 服务端接口、6 类推送事件的验签与解析，以及下单参数的生成；
 // 只用 Go 标准库（Go 1.21+），零第三方依赖。注释一律中文，每处「为什么这么写」和它的
@@ -129,4 +129,4 @@
 // 带输出、可直接跑，另外三个只编译不运行（要打微信的服务器）。
 //
 // 押注、存疑，以及「本包与官方文档不一致时选了哪边」的清单在 README——联调前值得过一遍。
-package wechat_virtualpay_go
+package wechat_virtualpay

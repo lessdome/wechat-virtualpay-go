@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -69,7 +69,7 @@ type SessionInfo struct {
 // 200、不是 JSON），**微信的业务失败不是 error**——code 无效/已过期/已被使用时，返回的
 // SessionInfo 里 ErrCode 非 0、OpenID 与 SessionKey 为空，err 是 nil：
 //
-//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
+//	sess, err := wechat_virtualpay.Code2Session(ctx, appID, appSecret, code)
 //	if err != nil {
 //		return err // 这一趟没走通
 //	}
@@ -81,13 +81,13 @@ type SessionInfo struct {
 // sess.ErrCode 上，可以按值分支，不用去抠 error 的文案。
 func Code2Session(ctx context.Context, appID, appSecret, code string) (*SessionInfo, error) {
 	if appID == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: appID 不能为空")
+		return nil, fmt.Errorf("wechat_virtualpay: appID 不能为空")
 	}
 	if appSecret == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: appSecret 不能为空")
+		return nil, fmt.Errorf("wechat_virtualpay: appSecret 不能为空")
 	}
 	if code == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: code 不能为空（由小程序端 wx.login 获取）")
+		return nil, fmt.Errorf("wechat_virtualpay: code 不能为空（由小程序端 wx.login 获取）")
 	}
 
 	q := url.Values{}
@@ -99,23 +99,23 @@ func Code2Session(ctx context.Context, appID, appSecret, code string) (*SessionI
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 构造 code2Session 请求失败: %w", stripURLError(err))
+		return nil, fmt.Errorf("wechat_virtualpay: 构造 code2Session 请求失败: %w", stripURLError(err))
 	}
 
 	resp, err := sessionHTTPClient.Do(req)
 	if err != nil {
 		// 先摘掉 URL：appSecret 与 js_code 都挂在 query 上，Go 的错误文案会连它们一起
 		// 带出来（见 stripURLError）。
-		return nil, fmt.Errorf("wechat_virtualpay_go: 请求 code2Session 失败: %w", stripURLError(err))
+		return nil, fmt.Errorf("wechat_virtualpay: 请求 code2Session 失败: %w", stripURLError(err))
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 读取 code2Session 响应失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: 读取 code2Session 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("wechat_virtualpay_go: code2Session 返回 HTTP %d %s（原始响应: %s）",
+		return nil, fmt.Errorf("wechat_virtualpay: code2Session 返回 HTTP %d %s（原始响应: %s）",
 			resp.StatusCode, http.StatusText(resp.StatusCode), raw)
 	}
 
@@ -128,7 +128,7 @@ func Code2Session(ctx context.Context, appID, appSecret, code string) (*SessionI
 		UnionID    string `json:"unionid"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 code2Session 响应失败: %w（原始响应: %s）", err, raw)
+		return nil, fmt.Errorf("wechat_virtualpay: 解析 code2Session 响应失败: %w（原始响应: %s）", err, raw)
 	}
 	if out.ErrCode != 0 {
 		// **业务失败不是 error**（与 /xpay/* 同一条契约，见 xpay.go 文件头）：err 只有
@@ -143,7 +143,7 @@ func Code2Session(ctx context.Context, appID, appSecret, code string) (*SessionI
 	if out.OpenID == "" || out.SessionKey == "" {
 		// errcode=0 却没回关键字段：这不是业务失败，是报文不对（也没有半个登录态可给），
 		// 按「没拿到可用的响应」处理——err 非 nil、响应为 nil。
-		return nil, fmt.Errorf("wechat_virtualpay_go: code2Session 未返回 openid 或 session_key（原始响应: %s）", raw)
+		return nil, fmt.Errorf("wechat_virtualpay: code2Session 未返回 openid 或 session_key（原始响应: %s）", raw)
 	}
 
 	return &SessionInfo{OpenID: out.OpenID, SessionKey: out.SessionKey, UnionID: out.UnionID}, nil

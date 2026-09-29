@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -89,7 +89,7 @@ const (
 // 两种都拦。这条是**文档写着的**，不是推出来的——与代币类那条「金额必须大于 0」不同。
 func checkOneGoodsItem(n int, what string) error {
 	if n != 1 {
-		return fmt.Errorf("wechat_virtualpay_go: %s 必须恰好一个道具，当前 %d 个（官方：一次仅支持一个，多个需分多次请求）", what, n)
+		return fmt.Errorf("wechat_virtualpay: %s 必须恰好一个道具，当前 %d 个（官方：一次仅支持一个，多个需分多次请求）", what, n)
 	}
 	return nil
 }
@@ -123,10 +123,10 @@ type UploadGoodsItem struct {
 
 func (i UploadGoodsItem) validate() error {
 	if i.ID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: 道具 ID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: 道具 ID 不能为空")
 	}
 	if i.Price <= 0 {
-		return fmt.Errorf("wechat_virtualpay_go: 道具 Price 必须大于 0（单位分，官方明写「需大于 0」）")
+		return fmt.Errorf("wechat_virtualpay: 道具 Price 必须大于 0（单位分，官方明写「需大于 0」）")
 	}
 	// Name / Remark / ItemURL 不查：官方没标它们必填，长度与格式也没有可依据的规则。
 	return nil
@@ -298,7 +298,7 @@ type PublishGoodsItem struct {
 
 func (i PublishGoodsItem) validate() error {
 	if i.ID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: 道具 ID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: 道具 ID 不能为空")
 	}
 	return nil
 }

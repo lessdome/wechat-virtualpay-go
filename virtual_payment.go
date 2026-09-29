@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"crypto/rand"
@@ -135,13 +135,13 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 //
 // 本函数**不发起任何网络请求**。典型用法（完整可编译可运行的版本见 ExampleBuildPayment）：
 //
-//	outTradeNo, err := wechat_virtualpay_go.NewOutTradeNo() // 也可用自己业务的单号
+//	outTradeNo, err := wechat_virtualpay.NewOutTradeNo() // 也可用自己业务的单号
 //	if err != nil {
 //		return err
 //	}
-//	p, err := wechat_virtualpay_go.BuildPayment(offerID, appKey, sess.SessionKey,
-//		wechat_virtualpay_go.PaymentRequest{
-//			Mode:       wechat_virtualpay_go.ModeShortSeriesGoods, // 或 ModeShortSeriesCoin
+//	p, err := wechat_virtualpay.BuildPayment(offerID, appKey, sess.SessionKey,
+//		wechat_virtualpay.PaymentRequest{
+//			Mode:       wechat_virtualpay.ModeShortSeriesGoods, // 或 ModeShortSeriesCoin
 //			ProductID:  "prod_001",                                // 仅道具直购
 //			GoodsPrice: 100,                                       // 单位：分，仅道具直购
 //			Quantity:   1,
@@ -158,7 +158,7 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 // 注意客户端有个前提：wx.requestVirtualPayment 需要基础库 >= 2.19.2。
 func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*VirtualPaymentParams, error) {
 	if offerID == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: offerID 不能为空")
+		return nil, fmt.Errorf("wechat_virtualpay: offerID 不能为空")
 	}
 	// env 必须排在 appKey 前面：appKey 的报错文案里要点出「该配现网还是沙箱那把」，
 	// 那是按 env 取的（见 checkAppKey）。
@@ -177,31 +177,31 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 	// Attach 在官方字段表里是必填、且不分模式。不拦的话会拿到一份 attach 为空串的
 	// signData 与自洽签名，本地无声通过，直到微信侧才以参数错误拒掉。
 	if req.Attach == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: Attach 不能为空（官方 signData 字段表标为必填，发货通知会把它透传回来）")
+		return nil, fmt.Errorf("wechat_virtualpay: Attach 不能为空（官方 signData 字段表标为必填，发货通知会把它透传回来）")
 	}
 
 	switch req.Mode {
 	case ModeShortSeriesGoods:
 		if req.ProductID == "" {
-			return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供 ProductID")
+			return nil, fmt.Errorf("wechat_virtualpay: 道具直购必须提供 ProductID")
 		}
 		if req.GoodsPrice <= 0 {
-			return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供正数 GoodsPrice（单位：分）")
+			return nil, fmt.Errorf("wechat_virtualpay: 道具直购必须提供正数 GoodsPrice（单位：分）")
 		}
 		// 优惠价不得低于道具价格的 40%。用整数比较避免浮点误差：
 		// activity >= 0.4*goods  <=>  activity*10 >= goods*4
 		if req.ActivitySellingPrice > 0 && req.ActivitySellingPrice*10 < req.GoodsPrice*4 {
-			return nil, fmt.Errorf("wechat_virtualpay_go: ActivitySellingPrice（%d 分）不得低于 GoodsPrice（%d 分）的 40%%",
+			return nil, fmt.Errorf("wechat_virtualpay: ActivitySellingPrice（%d 分）不得低于 GoodsPrice（%d 分）的 40%%",
 				req.ActivitySellingPrice, req.GoodsPrice)
 		}
 	case ModeShortSeriesCoin:
 		// 代币充值不带这三个道具字段。传了就是误用——静默忽略会让人以为价格生效了，
 		// 而金额是这里最不能含糊的东西，所以直接报错。
 		if req.ProductID != "" || req.GoodsPrice != 0 || req.ActivitySellingPrice != 0 {
-			return nil, fmt.Errorf("wechat_virtualpay_go: 代币充值不该传 ProductID / GoodsPrice / ActivitySellingPrice（它们是道具直购专用的）")
+			return nil, fmt.Errorf("wechat_virtualpay: 代币充值不该传 ProductID / GoodsPrice / ActivitySellingPrice（它们是道具直购专用的）")
 		}
 	default:
-		return nil, fmt.Errorf("wechat_virtualpay_go: Mode %q 非法，应为 %q 或 %q",
+		return nil, fmt.Errorf("wechat_virtualpay: Mode %q 非法，应为 %q 或 %q",
 			req.Mode, ModeShortSeriesGoods, ModeShortSeriesCoin)
 	}
 
@@ -222,7 +222,7 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 		Attach:               req.Attach,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 序列化下单参数失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: 序列化下单参数失败: %w", err)
 	}
 
 	return finishPayment(appKey, sessionKey, req.Mode, string(raw)), nil
@@ -241,13 +241,13 @@ func finishPayment(appKey, sessionKey string, mode PaymentMode, signData string)
 // checkOutTradeNo 按官方对 outTradeNo 的要求做校验。
 func checkOutTradeNo(v string) error {
 	if v == "" {
-		return fmt.Errorf("wechat_virtualpay_go: OutTradeNo 不能为空")
+		return fmt.Errorf("wechat_virtualpay: OutTradeNo 不能为空")
 	}
 	if !outTradeNoRe.MatchString(v) {
-		return fmt.Errorf("wechat_virtualpay_go: OutTradeNo %q 非法，须为 8–32 位数字/大小写字母/_-|*@", v)
+		return fmt.Errorf("wechat_virtualpay: OutTradeNo %q 非法，须为 8–32 位数字/大小写字母/_-|*@", v)
 	}
 	if v[0] == '_' {
-		return fmt.Errorf("wechat_virtualpay_go: OutTradeNo 不能以下划线开头")
+		return fmt.Errorf("wechat_virtualpay: OutTradeNo 不能以下划线开头")
 	}
 	return nil
 }
@@ -266,7 +266,7 @@ func checkOutTradeNo(v string) error {
 func NewOutTradeNo() (string, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("wechat_virtualpay_go: 生成订单号失败: %w", err)
+		return "", fmt.Errorf("wechat_virtualpay: 生成订单号失败: %w", err)
 	}
 	return time.Now().Format("20060102150405") + hex.EncodeToString(b[:]), nil
 }

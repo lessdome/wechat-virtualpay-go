@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 // 本文件是**文档一致性测试**：README.md 与 doc.go 是手写的散文，改代码时最容易忘了改它们。
 //
 // 旧 README 就是这么死的：它点名的 Env、EnvSandbox、ErrorCode、NewClient、Config 如今一个
-// 都不存在，而没有任何东西会因此报红——它一路漂到与代码全面矛盾，最后只能删掉重写。这三条
+// 都不存在，而没有任何东西会因此报红——它一路漂到与代码全面矛盾，最后只能删掉重写。这几条
 // 测试把「文档里写的」和「代码里的」绑在一起，让漂移在 `go test` 里就现形。
 //
 // 这组测试读文件系统（os.ReadFile / go/parser），是本仓库唯一这么做的测试。os 与 go/* 都是
@@ -110,6 +110,8 @@ var (
 	tableTierRE = regexp.MustCompile("`(Post[A-Za-z]+)`\\s*×\\s*(\\d+)")
 	// README / doc.go 里出现的接口路径
 	xpayPathRE = regexp.MustCompile("/xpay/[a-z0-9_]+")
+	// README 里指回仓库的地址（`go get` 行、CI 徽章、pkg.go.dev 链接）
+	repoURLRE = regexp.MustCompile(`github\.com/[A-Za-z0-9_.\-/]+`)
 	// 「整个反引号里就是一个标识符」才算要核的名字（带点、带括号、带空格的一律不管）
 	identRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
@@ -253,6 +255,59 @@ func TestDocPathsExistInSource(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestReadmeRepoPathsMatchModule 核 README 里每一处指回本仓库的地址（`go get` 行、CI 徽章、
+// pkg.go.dev 链接）用的都是 go.mod 里那个模块路径。
+//
+// 为什么要单来一条：这类字符串落在别的测试的管辖范围之外——TestReadmeNamesExist 只认大写开头
+// 的 Go 标识符，`github.com/<owner>/...` 是小写、带斜杠，它一概不管（readme_test.go 文件头
+// 记的就是这个盲区）。而**改名时最先被忘掉的就是 README 里那几处地址**，忘了之后读起来照旧
+// 通顺，只有照抄安装命令的人会失败。本测试加进来时正好是「包名与模块路径一起改名」那次，它
+// 就是为下一次改名准备的。
+//
+// 判定边界是「整段相等、或后面紧跟 /」，不是 HasPrefix：旧模块路径
+// github.com/lessdome/wechat_virtualpay_go 恰好以新路径 github.com/lessdome/wechat_virtualpay
+// 开头，光用前缀匹配会把最该抓的那条漏网之鱼放过去（这条测试加进来时正是这次改名）。
+//
+// 扫的是 README 里**所有** github.com 地址，不按 owner 过滤：按 owner 过滤看着聪明，实际会
+// 开一个静默的洞——owner 本身抄错（github.com/别家/wechat_virtualpay）就扫不到了。将来 README
+// 真要正当引用别的仓库（例如拿官方 wechatpay-go 做对比），就在这里加一条白名单并写明为什么。
+func TestReadmeRepoPathsMatchModule(t *testing.T) {
+	module := modulePath(t)
+	readme := readFile(t, readmePath)
+	seen := 0
+	for i, line := range strings.Split(readme, "\n") {
+		for _, p := range repoURLRE.FindAllString(line, -1) {
+			seen++
+			if p != module && !strings.HasPrefix(p, module+"/") {
+				t.Errorf("%s:%d 指向 %s，但 go.mod 里的模块路径是 %s——改名漏了这里？",
+					readmePath, i+1, p, module)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatalf("%s 里一处 github.com 地址都没扫到——探针坏了，别把「扫不到」当成「没问题」", readmePath)
+	}
+	if !strings.Contains(readme, "go get "+module) {
+		t.Errorf("%s 里没有 `go get %s`——安装命令是新人第一个要抄的东西", readmePath, module)
+	}
+}
+
+// modulePath 从 go.mod 里取出 module 行。
+func modulePath(t *testing.T) string {
+	t.Helper()
+	for _, line := range strings.Split(readFile(t, "go.mod"), "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module ")
+		if !ok {
+			continue
+		}
+		if p := strings.TrimSpace(rest); p != "" {
+			return p
+		}
+	}
+	t.Fatal("go.mod 里没解析出 module 行——格式变了？")
+	return ""
 }
 
 // TestReadmeNamesExist 核 README.md 与 doc.go 里反引号包着的标识符在包里真实存在。
