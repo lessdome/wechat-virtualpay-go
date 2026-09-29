@@ -186,6 +186,38 @@ func TestActivitySellingPrice(t *testing.T) {
 	}
 }
 
+// 优惠价有下限：不得低于道具价的 40%。边界用整数比较，正好 40% 要能过。
+func TestActivitySellingPriceLowerBound(t *testing.T) {
+	cases := []struct {
+		name            string
+		goods, activity int64
+		wantErr         bool
+	}{
+		{"正好 40% 放行", 100, 40, false},
+		{"高于 40% 放行", 100, 41, false},
+		{"低于 40% 报错", 100, 39, true},
+		{"远低于 40% 报错", 100, 1, true},
+		{"分币粒度下的 40% 边界", 10, 4, false},
+		{"不传优惠价则不校验", 100, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := goodsReq()
+			r.GoodsPrice, r.ActivitySellingPrice = c.goods, c.activity
+			_, err := BuildPayment(testOfferID, testAppKey, testSessionKey, r)
+			if c.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "40%") {
+					t.Fatalf("期望报错含 40%%，实际: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("不该报错: %v", err)
+			}
+		})
+	}
+}
+
 // 订单号格式
 func TestOutTradeNoValidation(t *testing.T) {
 	cases := []struct {
@@ -217,6 +249,22 @@ func TestCredentialValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := BuildPayment(tc.oid, tc.key, tc.sk, goodsReq()); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("期望报错含 %q，实际: %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// Attach 必填（官方 signData 字段表的必填列标「是」），两种模式都不许空
+func TestAttachRequired(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		req  PaymentRequest
+	}{{"道具", goodsReq()}, {"代币", coinReq()}} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := tc.req
+			r.Attach = ""
+			if _, err := BuildPayment(testOfferID, testAppKey, testSessionKey, r); err == nil || !strings.Contains(err.Error(), "Attach") {
+				t.Fatalf("空 Attach 应当报错，实际: %v", err)
 			}
 		})
 	}
@@ -270,7 +318,6 @@ func TestModeValidation(t *testing.T) {
 // 生成的订单号必须过本包自己的校验，且长度固定、不重复
 func TestNewOutTradeNo(t *testing.T) {
 	seen := make(map[string]bool, 2000)
-	prefix := time.Now().Format("20060102")
 
 	for i := 0; i < 2000; i++ {
 		v, err := NewOutTradeNo()
@@ -283,8 +330,15 @@ func TestNewOutTradeNo(t *testing.T) {
 		if len(v) != 30 {
 			t.Fatalf("长度应为 30，实际 %d：%s", len(v), v)
 		}
-		if !strings.HasPrefix(v, prefix) {
-			t.Fatalf("时间前缀不对：%s", v)
+		// 前 14 位是生成时刻的「年月日时分秒」。解析回来与当前时刻比，
+		// 而不是比 time.Now().Format 出来的字符串：前缀取自生成时、字符串取自断言时，
+		// 恰好跨零点的情况下两者会差一天，报一个与代码正确性无关的假失败。
+		ts, err := time.ParseInLocation("20060102150405", v[:14], time.Local)
+		if err != nil {
+			t.Fatalf("时间前缀不是合法的 14 位时间戳：%s（%v）", v, err)
+		}
+		if d := time.Since(ts); d < -time.Minute || d > time.Minute {
+			t.Fatalf("时间前缀偏离当前时刻 %v：%s", d, v)
 		}
 		if seen[v] {
 			t.Fatalf("2000 次里出现重复：%s", v)

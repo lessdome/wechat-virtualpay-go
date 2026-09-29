@@ -78,14 +78,17 @@ type PaymentRequest struct {
 	// 决定，官方 signData 里没有价格字段。
 	Quantity int64
 	// ActivitySellingPrice 优惠价，单位**分**。可选，**仅道具直购**。
-	// 传了它就是实际下单价格。官方只说「需与 goodsPrice 一起传入」——道具直购下
-	// goodsPrice 本来就必填，所以无需额外校验。
+	// 传了它就是实际下单价格。官方另外要求它**不得低于 GoodsPrice 的 40%**——
+	// 越界会在微信侧才被拒（客户端 -15016、服务端 268490002），所以这里先拦下来。
 	ActivitySellingPrice int64
 	// OutTradeNo 业务订单号（signData 的 outTradeNo）。必填。
 	// 8–32 字符，只能由数字、大小写字母、_-|*@ 组成，不能以 _ 开头，且每单只能用一次。
 	// 懒得拼就用本包的 NewOutTradeNo()。
 	OutTradeNo string
 	// Attach 透传数据（signData 的 attach）。必填。
+	//
+	// 官方 signData 字段表的必填列标「是」，且不分模式——代币充值也要传，传空
+	// BuildPayment 会直接报错。
 	//
 	// 官方对它的说明是「发货通知时会透传给开发者」——代币充值没有发货环节，它究竟
 	// 从哪儿、什么时候回来，文档没写。
@@ -122,17 +125,24 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 // 两点要留意：它是**会话级**凭据，不是每单一个——同一次登录态可以下多笔单；它会
 // **过期**，过期的表现是服务端报 268490009、客户端报 -15007，届时让前端重新 wx.login。
 //
-// 本函数不联网。典型用法：
+// 本函数不联网。典型用法（完整可编译可运行的版本见 ExampleBuildPayment）：
 //
+//	outTradeNo, err := wechat_virtualpay_go.NewOutTradeNo() // 也可用自己业务的单号
+//	if err != nil {
+//		return err
+//	}
 //	p, err := wechat_virtualpay_go.BuildPayment(offerID, appKey, sess.SessionKey,
 //		wechat_virtualpay_go.PaymentRequest{
 //			Mode:       wechat_virtualpay_go.ModeShortSeriesGoods, // 或 ModeShortSeriesCoin
 //			ProductID:  "prod_001",                                // 仅道具直购
 //			GoodsPrice: 100,                                       // 单位：分，仅道具直购
 //			Quantity:   1,
-//			OutTradeNo: wechat_virtualpay_go.NewOutTradeNo(),
+//			OutTradeNo: outTradeNo,
 //			Attach:     "自定义透传数据",
 //		})
+//	if err != nil {
+//		return err
+//	}
 //
 // 返回后把 p.SignData / p.PaySig / p.Signature / p.Mode 交给前端，传给
 // wx.requestVirtualPayment。**SignData 必须原样传**，前端不得重新序列化。
@@ -151,6 +161,11 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 	if err := checkOutTradeNo(req.OutTradeNo); err != nil {
 		return nil, err
 	}
+	// Attach 在官方字段表里是必填、且不分模式。不拦的话会拿到一份 attach 为空串的
+	// signData 与自洽签名，本地无声通过，直到微信侧才以参数错误拒掉。
+	if req.Attach == "" {
+		return nil, fmt.Errorf("wechat_virtualpay_go: Attach 不能为空（官方 signData 字段表标为必填，发货通知会把它透传回来）")
+	}
 
 	switch req.Mode {
 	case ModeShortSeriesGoods:
@@ -159,6 +174,12 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 		}
 		if req.GoodsPrice <= 0 {
 			return nil, fmt.Errorf("wechat_virtualpay_go: 道具直购必须提供正数 GoodsPrice（单位：分）")
+		}
+		// 优惠价不得低于道具价格的 40%。用整数比较避免浮点误差：
+		// activity >= 0.4*goods  <=>  activity*10 >= goods*4
+		if req.ActivitySellingPrice > 0 && req.ActivitySellingPrice*10 < req.GoodsPrice*4 {
+			return nil, fmt.Errorf("wechat_virtualpay_go: ActivitySellingPrice（%d 分）不得低于 GoodsPrice（%d 分）的 40%%",
+				req.ActivitySellingPrice, req.GoodsPrice)
 		}
 	case ModeShortSeriesCoin:
 		// 代币充值不带这三个道具字段。传了就是误用——静默忽略会让人以为价格生效了，
