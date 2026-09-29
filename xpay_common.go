@@ -57,6 +57,23 @@ func checkAppKey(appKey string, env int) error {
 	return nil
 }
 
+// checkSessionKey 校验用户会话密钥。
+//
+// 它与 accessToken / appKey 并列，是本包的三种凭据之一，所以放在这儿与另外两把一起：
+// 「凭证校验都在这儿」这条比「按接口类分文件」更该守——漏了它，这个文件的名字就名不
+// 副实，而同一句要给人看的文案迟早会在各处走样。
+//
+// 空串一律拦下。空 sessionKey 会算出一份**算得出来的** signature（HMAC 拿空 key 照样
+// 出值），本地看着自洽，要到微信侧才报 268490003。过期是另一回事：过期的 session_key
+// 非空，本地查不出来，表现为服务端 268490009（或客户端 -15007），只能靠调用方重新
+// Code2Session 换一把。
+func checkSessionKey(v string) error {
+	if v == "" {
+		return fmt.Errorf("wechat_virtualpay_go: sessionKey 不能为空（用 Code2Session 换取）")
+	}
+	return nil
+}
+
 // stripURLError 去掉 http.Client 错误文案里的 URL，只留内层的失败原因。
 //
 // 为什么非做不可：传输层失败（DNS、连不上、超时）时 Go 回的是 *url.Error，文案形如

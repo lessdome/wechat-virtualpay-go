@@ -168,8 +168,8 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 	if err := checkAppKey(appKey, req.Env); err != nil {
 		return nil, err
 	}
-	if sessionKey == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: sessionKey 不能为空（用 Code2Session 换取）")
+	if err := checkSessionKey(sessionKey); err != nil {
+		return nil, err
 	}
 	if err := checkOutTradeNo(req.OutTradeNo); err != nil {
 		return nil, err

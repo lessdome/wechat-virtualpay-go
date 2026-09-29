@@ -497,7 +497,7 @@ func TestHTTPErrorIsPlainError(t *testing.T) {
 // ——碰 nil 响应立刻 panic；要是返回值类型，他会拿到一个 errcode=0 的零值响应，而那恰好
 // 是本包契约里「成功」的样子，一路静默错下去。
 //
-// 5 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
+// 9 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
 // 参数没过本地校验（一个字节都没发出去）、非 200、网络失败。
 func TestErrorReturnsNilResponse(t *testing.T) {
 	provided := true
@@ -526,6 +526,27 @@ func TestErrorReturnsNilResponse(t *testing.T) {
 		},
 		"QueryDownloadOrder": func(tk string) (bool, error) {
 			r, err := QueryDownloadOrder(context.Background(), tk, "K", QueryDownloadOrderRequest{TaskID: "t"})
+			return r == nil, err
+		},
+		// 代币类 4 个。三个用户态接口的 appKey/sessionKey 是常量，注入的失败源只有 token。
+		"QueryUserBalance": func(tk string) (bool, error) {
+			r, err := QueryUserBalance(context.Background(), tk, "K", "S",
+				QueryUserBalanceRequest{OpenID: "o", UserIP: "1.2.3.4"})
+			return r == nil, err
+		},
+		"CurrencyPay": func(tk string) (bool, error) {
+			r, err := CurrencyPay(context.Background(), tk, "K", "S", CurrencyPayRequest{
+				OpenID: "o", UserIP: "1.2.3.4", Amount: 100, OrderID: "c1"})
+			return r == nil, err
+		},
+		"CancelCurrencyPay": func(tk string) (bool, error) {
+			r, err := CancelCurrencyPay(context.Background(), tk, "K", "S", CancelCurrencyPayRequest{
+				OpenID: "o", UserIP: "1.2.3.4", PayOrderID: "c1", OrderID: "r1", Amount: 100})
+			return r == nil, err
+		},
+		"PresentCurrency": func(tk string) (bool, error) {
+			r, err := PresentCurrency(context.Background(), tk,
+				PresentCurrencyRequest{OpenID: "o", OrderID: "p1", Amount: 5})
 			return r == nil, err
 		},
 	}
