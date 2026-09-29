@@ -381,7 +381,9 @@ func TestComplaintRequestBodies(t *testing.T) {
 			`{"complaint_id":"C1","response_content":"已处理，退款已原路返回","env":0}`,
 		},
 		{
-			// 只回图片：response_content 没有 omitempty，空串照样发（它在字段表里）。
+			// 只回图片：两个字段都是**可选**（二选一），所以空的那一栏**整行不出现**。
+			// 不带 omitempty 的话这里会是 `"response_content":""`——空串与「没填」在
+			// 协议上是两件事，前者可能被判参数错误。
 			"response_complaint 只回图片",
 			"/xpay/response_complaint",
 			func(ctx context.Context) error {
@@ -389,7 +391,7 @@ func TestComplaintRequestBodies(t *testing.T) {
 					ComplaintID: "C1", ResponseImages: []string{"F1", "F2"}})
 				return err
 			},
-			`{"complaint_id":"C1","response_content":"","response_images":["F1","F2"],"env":0}`,
+			`{"complaint_id":"C1","response_images":["F1","F2"],"env":0}`,
 		},
 		{
 			"complete_complaint",

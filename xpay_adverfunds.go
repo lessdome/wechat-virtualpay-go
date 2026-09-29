@@ -31,6 +31,9 @@ import (
 // 真机联调时若这七个里有哪个回了 268490003（签名错误），把它换到 PostWithPaySig 即可：
 // 每个函数只需多收一个 appKey 参数、多一行 checkAppKey。
 //
+// 「`pre-rewrite` 分支上那份被删掉的实现」这七个也全是 `callMerchant`（即本档）——两次
+// 照同一张参数表读出的结论一致。不算独立证据，但至少说明这不是这一次新押的注。
+//
 // 本类的本地校验遵循同一条规则，只有两半：
 //
 //  1. **官方字段表标了必填的，空值/零值在本地拦**（本类不少必填字段在广告金这条链路上
@@ -454,6 +457,11 @@ type BindTransferAccountResponse struct {
 // ⚠️ 两栏都按**必填**处理。依据是绑定这个动作的输入就是这两样，缺一个构不成一次绑定；
 // 本包也没有独立核过官方这两栏的可选标记（广告金这条链路的文档在开发机上取不到）。若实测
 // 官方确实允许只传其中一样，去掉那一条校验即可。
+//
+// ⚠️ 这是本类里**本包与旧实现不一致**的唯一一处：「`pre-rewrite` 分支上那份被删掉的实现」
+// 给这两栏都挂了 `omitempty`，值空就不发（于是 uid=0 时会把一个空请求体发出去）。本包
+// 改成必填，是**有意的收紧**——空 uid 的绑定请求没有任何意义，与其发出去换一个语焉不详的
+// 参数错误，不如在本地拦下。
 //
 // 官方文档：POST /xpay/bind_transfer_accout（拼写见上面的 ⚠️）
 func BindTransferAccount(ctx context.Context, accessToken string, req BindTransferAccountRequest) (*BindTransferAccountResponse, error) {

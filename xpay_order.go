@@ -410,7 +410,11 @@ func (r RefundOrderRequest) validate() error {
 // ⚠️ 文档存疑：本接口的「注意事项」写着「使用用户态签名与支付签名」，但它的 query
 // 参数表只列了 access_token 与 pay_sig，没有 signature，且那段话与其它接口的模板
 // 文字雷同。本包按参数表实现（只加 pay_sig）。若实测 resp.ErrCode 是 268490003
-// （签名错误），说明它确实还要用户态签名，那时改调 PostWithUserSig 即可。
+// （签名错误），说明它确实还要用户态签名，那时改调 PostWithUserSig 即可——注意那是
+// **改函数签名**（要多收一个 sessionKey），不是改内部。
+//
+// 「`pre-rewrite` 分支上那份被删掉的实现」本接口同样是 `callPaySig`，且在同一处记了同一句
+// 存疑——两次读同一张表，结论一致。不算独立证据，但至少说明这不是这一次新押的注。
 //
 // 官方文档：POST /xpay/refund_order
 func RefundOrder(ctx context.Context, accessToken, appKey string, req RefundOrderRequest) (*RefundOrderResponse, error) {

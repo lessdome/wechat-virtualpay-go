@@ -283,7 +283,10 @@ type GetComplaintListResponse struct {
 //	req          日期区间（yyyy-mm-dd）与分页。
 //
 // ⚠️ 官方这一页的「注意事项」写着用「用户态签名与支付签名」，但它自己的参数表只列了
-// pay_sig——本包按参数表实现（见文件头）。
+// pay_sig——本包按参数表实现（见文件头）。「`pre-rewrite` 分支上那份被删掉的实现」本接口
+// 同样是 `callPaySig`，且在同一处记了同一句存疑——两次读同一张表，结论一致。真机若回
+// 268490003，本函数的签名要跟着变（多收一个 sessionKey），这是本类唯一一处**押错就得改
+// 函数签名**的地方。
 //
 // 官方文档：POST /xpay/get_complaint_list
 func GetComplaintList(ctx context.Context, accessToken, appKey string, req GetComplaintListRequest) (*GetComplaintListResponse, error) {
@@ -496,15 +499,19 @@ type ResponseComplaintRequest struct {
 	// ComplaintID 投诉 ID。
 	ComplaintID string `json:"complaint_id"`
 	// ResponseContent 回复内容（文字）。
-	ResponseContent string `json:"response_content"`
+	//
+	// 带 omitempty：它与 ResponseImages 是**二选一**（见 validate），所以它是**可选**的
+	// ——本包的规矩是可选字段都带。只回图片时不该把这一栏发出去：发了就是
+	// `"response_content":""`，把一个「没填」写成一个**出现了的空串**。万一微信对「出现
+	// 但为空」的回复内容报参数错误，只回图片这条路就会稳定失败，而错误信息看不出原因；
+	// 「不出现」则永远不可能是非法的。
+	ResponseContent string `json:"response_content,omitempty"`
 	// ResponseImages 回复的图片，每一项是 UploadVPFile 返回的 FileID。
 	//
 	// ⚠️ 这里要的是 **FileID**（本包接口换来的），不是图片 URL——用户端看到的是那张图。
 	// 传 URL 会被当成无效 file_id。
 	//
-	// 带 omitempty（本包的规矩是**可选**字段都带）：这一栏是可选的，只回文字时不该把它
-	// 发出去——不带 omitempty 的话 nil 会序列化成 "response_images":null，把「没有图」写成
-	// 一个 null 值，不如干脆不出现这一行。
+	// 同样带 omitempty，理由同上（只回文字时 nil 会序列化成 "response_images":null）。
 	ResponseImages []string `json:"response_images,omitempty"`
 	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。见 GetComplaintListRequest 的同名字段。
 	Env int `json:"env"`
@@ -835,6 +842,10 @@ type RecoverySpecification struct {
 //
 // 若真机报 268490003（签名错误），最可能的原因是微信期望的请求体不是 `{}` —— 那就把
 // xpayNoEnv 这个方法删掉，让 requestBody 补上 env（发出去与签名的都会变成 {"env":0}）。
+//
+// 「`pre-rewrite` 分支上那份被删掉的实现」发的也是一份空结构体（序列化成 `{}`），并且在
+// 同一处记了同一句存疑——两次读同一页，结论一致。不算独立证据，但至少说明发 `{}` 不是
+// 这一次新押的注。
 type punishmentReasonsBody struct{}
 
 func (punishmentReasonsBody) xpayNoEnv() {}

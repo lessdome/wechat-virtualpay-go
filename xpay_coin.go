@@ -111,6 +111,10 @@ type QueryUserBalanceResponse struct {
 	// 报文（见 xpaySend），所以不会静默，但这一趟也就读不到 errcode 了。真机若证实微信
 	// 回的是 0/1，改法是给这个字段换一个能同时吃 true/false 与 0/1 的自定义反序列化类型，
 	// 并同步改 xpay_coin_test.go 的 TestCoinFieldsCoverDoc（那里逐字段钉类型）。
+	//
+	// 「`pre-rewrite` 分支上那份被删掉的实现」也是同样取 bool、同样记了这处三矛盾——两次
+	// 照同一张表读出的结论一致。不算独立证据（同一份文档、同一个读法），但至少说明这不是
+	// 这一次新押的注。
 	FirstSaveFlag bool `json:"first_save_flag"`
 }
 
@@ -446,6 +450,9 @@ type PresentCurrencyResponse struct {
 // 注意它**没有 appKey 参数**：官方 query 参数表里本接口只有 access_token，没有 pay_sig
 // （与订单类的 NotifyProvideGoods 同档）。这不是漏看，参数表本身就是证据。若实测
 // resp.ErrCode 是 268490003（签名错误），说明它其实也要 pay_sig，那时改调 PostWithPaySig。
+//
+// 「`pre-rewrite` 分支上那份被删掉的实现」本接口也是 `callMerchant`（即本档）——两次照
+// 同一张参数表读出的结论一致。不算独立证据，但至少说明这不是这一次新押的注。
 //
 // ⚠️ 本接口**没有按单号查询的接口**——官方没提供查赠送单的方法。所以赠送失败时没法回头
 // 问一句「到底赠出去没有」，只能重试，而重试的两种回答都是好的：
