@@ -174,17 +174,73 @@ func TestParseInputValidation(t *testing.T) {
 	})
 }
 
-// 机械比对：文档字段表里的字段名，必须都能在对应结构体的 json tag 里找到。
-// 期望集合是从官方 2.4 的 6 张字段表里抽出来的（共 100 个字段名）。
+// fieldSpec 是文档字段表里的一项：字段名 + 它在结构体里应有的类型。
+type fieldSpec struct {
+	name string
+	typ  reflect.Type
+}
+
+// 机械比对：文档字段表里的字段名与**类型**，都必须与对应结构体一致。
+//
+// 期望集合是从官方 2.4 的 6 张字段表里抽出来的（共 100 个字段）。只比字段名是不够的
+// ——把 int64 抄成 string 同样能全绿，直到真机推送反序列化失败才暴露（错误会被包成
+// 「解析 xxx 事件失败」，微信重试 15 次全部落空）。所以这里连类型一起钉住。
 func TestNotifyFieldsCoverDoc(t *testing.T) {
-	doc := map[string][]string{
-		"xpay_goods_deliver_notify":  {"ToUserName", "FromUserName", "CreateTime", "MsgType", "Event", "OpenId", "OutTradeNo", "Env", "WeChatPayInfo", "GoodsInfo", "MchOrderNo", "TransactionId", "PaidTime", "ProductId", "Quantity", "OrigPrice", "ActualPrice", "Attach", "ActivityId", "TeamId", "TeamType", "TeamAction"},
-		"xpay_coin_pay_notify":       {"ToUserName", "FromUserName", "CreateTime", "MsgType", "Event", "OpenId", "OutTradeNo", "Env", "WeChatPayInfo", "CoinInfo", "MchOrderNo", "TransactionId", "PaidTime", "Quantity", "OrigPrice", "ActualPrice", "Attach"},
-		"xpay_refund_notify":         {"ToUserName", "FromUserName", "CreateTime", "MsgType", "Event", "OpenId", "WxRefundId", "MchRefundId", "WxOrderId", "MchOrderId", "RefundFee", "RetCode", "RetMsg", "RefundStartTimestamp", "RefundSuccTimestamp", "WxpayRefundTransactionId", "RetryTimes", "Attach", "WxTransactionId", "ActivityId", "TeamId", "TeamType", "TeamAction"},
-		"xpay_complaint_notify":      {"ToUserName", "FromUserName", "CreateTime", "MsgType", "Event", "OpenId", "WxOrderId", "MchOrderId", "TransactionId", "ComplaintId", "ComplaintDetail", "ComplaintTime", "RetryTimes", "RequestId"},
-		"xpay_wxpay_callback_notify": {"ToUserName", "FromUserName", "CreateTime", "MsgType", "Event", "AppId", "NickName", "MerchantCode", "MerchantCompanyName", "BusinessTime", "BusinessCode", "BusinessState", "Remark", "EventType", "RetryTimes"},
+	tStr := reflect.TypeOf("")
+	tI64 := reflect.TypeOf(int64(0))
+	tInt := reflect.TypeOf(int(0))
+	tEvent := reflect.TypeOf(NotifyEvent(""))
+	tRiskType := reflect.TypeOf(WxpayCallbackEventType(""))
+	tIOSStatus := reflect.TypeOf(IOSProvideStatus(""))
+	// 容器字段按指针类型钉：它们必须可为 nil，否则官方那句「非微信支付渠道可能没有」
+	// 就落不了地。（TeamInfo 的容器名不在文档字段表里，只有它内层的四个字段在，
+	// 所以这里没有对应的类型项。）
+	tPay := reflect.TypeOf((*WeChatPayInfo)(nil))
+	tGoods := reflect.TypeOf((*GoodsInfo)(nil))
+	tCoin := reflect.TypeOf((*CoinInfo)(nil))
+
+	doc := map[string][]fieldSpec{
+		"xpay_goods_deliver_notify": {
+			{"ToUserName", tStr}, {"FromUserName", tStr}, {"CreateTime", tI64}, {"MsgType", tStr}, {"Event", tEvent},
+			{"OpenId", tStr}, {"OutTradeNo", tStr}, {"Env", tInt},
+			{"WeChatPayInfo", tPay}, {"GoodsInfo", tGoods},
+			{"MchOrderNo", tStr}, {"TransactionId", tStr}, {"PaidTime", tI64},
+			{"ProductId", tStr}, {"Quantity", tI64}, {"OrigPrice", tI64}, {"ActualPrice", tI64}, {"Attach", tStr},
+			{"ActivityId", tStr}, {"TeamId", tStr}, {"TeamType", tInt}, {"TeamAction", tInt},
+		},
+		"xpay_coin_pay_notify": {
+			{"ToUserName", tStr}, {"FromUserName", tStr}, {"CreateTime", tI64}, {"MsgType", tStr}, {"Event", tEvent},
+			{"OpenId", tStr}, {"OutTradeNo", tStr}, {"Env", tInt},
+			{"WeChatPayInfo", tPay}, {"CoinInfo", tCoin},
+			{"MchOrderNo", tStr}, {"TransactionId", tStr}, {"PaidTime", tI64},
+			{"Quantity", tI64}, {"OrigPrice", tI64}, {"ActualPrice", tI64}, {"Attach", tStr},
+		},
+		"xpay_refund_notify": {
+			{"ToUserName", tStr}, {"FromUserName", tStr}, {"CreateTime", tI64}, {"MsgType", tStr}, {"Event", tEvent},
+			{"OpenId", tStr}, {"WxRefundId", tStr}, {"MchRefundId", tStr}, {"WxOrderId", tStr}, {"MchOrderId", tStr},
+			{"RefundFee", tI64}, {"RetCode", tInt}, {"RetMsg", tStr},
+			{"RefundStartTimestamp", tI64}, {"RefundSuccTimestamp", tI64}, {"WxpayRefundTransactionId", tStr},
+			{"RetryTimes", tInt}, {"Attach", tStr}, {"WxTransactionId", tStr},
+			{"ActivityId", tStr}, {"TeamId", tStr}, {"TeamType", tInt}, {"TeamAction", tInt},
+		},
+		"xpay_complaint_notify": {
+			{"ToUserName", tStr}, {"FromUserName", tStr}, {"CreateTime", tI64}, {"MsgType", tStr}, {"Event", tEvent},
+			{"OpenId", tStr}, {"WxOrderId", tStr}, {"MchOrderId", tStr}, {"TransactionId", tStr},
+			{"ComplaintId", tStr}, {"ComplaintDetail", tStr}, {"ComplaintTime", tI64},
+			{"RetryTimes", tInt}, {"RequestId", tStr},
+		},
+		"xpay_wxpay_callback_notify": {
+			{"ToUserName", tStr}, {"FromUserName", tStr}, {"CreateTime", tI64}, {"MsgType", tStr}, {"Event", tEvent},
+			{"AppId", tStr}, {"NickName", tStr}, {"MerchantCode", tStr}, {"MerchantCompanyName", tStr},
+			{"BusinessTime", tStr}, {"BusinessCode", tStr}, {"BusinessState", tStr}, {"Remark", tStr},
+			{"EventType", tRiskType}, {"RetryTimes", tInt},
+		},
 		// iOS 退款问询的字段表是 snake_case，且**没有 Event**
-		"xpay_subscribe_ios_refund_query_notify": {"refund_time", "order_time", "channel_bill", "bundleid", "product_id", "p_count", "refund_request_reason", "provide_status", "pay_order_id"},
+		"xpay_subscribe_ios_refund_query_notify": {
+			{"refund_time", tStr}, {"order_time", tStr}, {"channel_bill", tStr}, {"bundleid", tStr},
+			{"product_id", tStr}, {"p_count", tStr}, {"refund_request_reason", tStr},
+			{"provide_status", tIOSStatus}, {"pay_order_id", tStr},
+		},
 	}
 	structs := map[string]any{
 		"xpay_goods_deliver_notify":              GoodsDeliverNotify{},
@@ -197,23 +253,31 @@ func TestNotifyFieldsCoverDoc(t *testing.T) {
 
 	total := 0
 	for event, want := range doc {
-		got := map[string]bool{}
-		collectJSONTags(reflect.TypeOf(structs[event]), got)
+		got := map[string]reflect.Type{}
+		collectJSONFieldTypes(reflect.TypeOf(structs[event]), got)
 		for _, f := range want {
 			total++
-			if !got[f] {
-				t.Errorf("事件 %s 缺文档里的字段 %q", event, f)
+			typ, ok := got[f.name]
+			if !ok {
+				t.Errorf("事件 %s 缺文档里的字段 %q", event, f.name)
+				continue
+			}
+			if typ != f.typ {
+				t.Errorf("事件 %s 的字段 %q 类型不对：结构体是 %s，文档是 %s", event, f.name, typ, f.typ)
 			}
 		}
-		t.Logf("%s：文档 %d 个字段全部命中（结构体共 %d 个 json tag）", event, len(want), len(got))
+		t.Logf("%s：文档 %d 个字段的名字与类型全部命中（结构体共 %d 个 json tag）", event, len(want), len(got))
 	}
 	if total != 100 {
 		t.Fatalf("文档字段总数应为 100，实际 %d（期望集合可能抄漏）", total)
 	}
 }
 
-// collectJSONTags 递归收集结构体（含嵌入与嵌套）里的 json tag 名。
-func collectJSONTags(t reflect.Type, out map[string]bool) {
+// collectJSONFieldTypes 递归收集结构体（含嵌入与嵌套）里的 json tag 名 → 字段类型。
+//
+// 同名 tag 只记第一次出现的那个：同一事件里不应该有重名不同型的字段，真出现了
+// 说明结构体本身有问题，由对照表那侧报出来。
+func collectJSONFieldTypes(t reflect.Type, out map[string]reflect.Type) {
 	for t.Kind() == reflect.Ptr || t.Kind() == reflect.Slice {
 		t = t.Elem()
 	}
@@ -225,9 +289,11 @@ func collectJSONTags(t reflect.Type, out map[string]bool) {
 		if tag, ok := f.Tag.Lookup("json"); ok {
 			name := strings.Split(tag, ",")[0]
 			if name != "" && name != "-" {
-				out[name] = true
+				if _, seen := out[name]; !seen {
+					out[name] = f.Type
+				}
 			}
 		}
-		collectJSONTags(f.Type, out)
+		collectJSONFieldTypes(f.Type, out)
 	}
 }
