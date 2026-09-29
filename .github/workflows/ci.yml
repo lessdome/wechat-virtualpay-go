@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支上的旧跑批被新的顶掉：省 runner，也让「最新那次提交绿了没」一眼可见。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.21 是 go.mod 里声明的最低版本——它必须真能编过，否则那个声明就是一句空话。
+        # stable / oldstable 是 setup-go 的**别名**（不是写死的版本号），这样半年后不会
+        # 指向一个还不存在的版本，把一个好 PR 拦在门外。
+        go: ['1.21', 'stable', 'oldstable']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      # 下面三步与本地门禁逐字一致：gofmt -l . ; go vet ./... ; go test -race -count=1 ./...
+      # 刻意不在这里加别的检查（覆盖率门槛、lint 之类）：CI 跑的就是你本地该跑的那三条，
+      # 「本地绿了 CI 却红」这种事才不会有第二种解释。
+      - name: gofmt -l .
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::以下文件没过 gofmt，本地跑 gofmt -w . 再提交"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet ./...
+        run: go vet ./...
+
+      - name: go test -race -count=1 ./...
+        run: go test -race -count=1 ./...
+
+      # 「零第三方依赖」由 TestNoThirdPartyDeps 守着（它会解析 go.mod），跟着上面这步
+      # 一起跑，三个版本都跑——所以这里不用再单独写一条。
+      # 文档与代码的一致性（分类表、路径、标识符）也在这套测试里。

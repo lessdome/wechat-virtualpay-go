@@ -9,6 +9,14 @@ import (
 	"net/http"
 )
 
+// 本文件实现推送报文的解析：验签（见 notify_verify.go）→ 识别事件 → 反序列化。
+//
+// 只支持 **JSON 报文 + 明文模式**：MP 后台「消息推送配置」里两项都要配对——数据格式选
+// JSON、消息解密方式选明文。配成别的，推送会被明确拒绝，而不是含糊地解析失败。
+//
+// 6 类事件的字段取自官方《虚拟支付》页 2.4 的字段表，逐字对应；测试里有一条会拿文档
+// 字段表去机械比对结构体，防止抄错。
+
 // NotifyEvent 是虚拟支付推送的事件类型。
 type NotifyEvent string
 
@@ -35,6 +43,9 @@ const (
 // ErrInvalidSignature 表示推送验签失败。
 //
 // 用 errors.Is(err, ErrInvalidSignature) 判断。注意**签名不过就绝不能发货**。
+//
+// 但反过来不成立：**验签通过不等于报文可信**——签的只有 URL 上的 token/timestamp/
+// nonce，报文体不在其中。详细说明见 notify_verify.go 开头。
 var ErrInvalidSignature = errors.New("wechat_virtualpay_go: 推送验签失败")
 
 // Notification 是一次解析后的推送。
@@ -130,7 +141,11 @@ type GoodsDeliverNotify struct {
 	OpenID string `json:"OpenId"`
 	// OutTradeNo 业务订单号。
 	OutTradeNo string `json:"OutTradeNo"`
-	// Env 环境标识。本包只支持现网，恒为 0。
+	// Env 环境标识。这是**微信原样回**的，不是本包填的——本包不解读、不过滤。
+	//
+	// ⚠️ 它的**值域官方字段表没写**（表里只给了字段名和 int）。所以别拿它跟请求体的
+	// Env 直接比：本包这边已经有两套并存的编码——请求体是 0=现网 / 1=沙箱，响应里的
+	// OrderEnvType 是 1=现网 / 2=沙箱。这个字段属哪一套，要真机联调才敢定。
 	Env int `json:"Env"`
 	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
 	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo"`
@@ -147,7 +162,11 @@ type CoinPayNotify struct {
 	OpenID string `json:"OpenId"`
 	// OutTradeNo 业务订单号。
 	OutTradeNo string `json:"OutTradeNo"`
-	// Env 环境标识。本包只支持现网，恒为 0。
+	// Env 环境标识。这是**微信原样回**的，不是本包填的——本包不解读、不过滤。
+	//
+	// ⚠️ 它的**值域官方字段表没写**（表里只给了字段名和 int）。所以别拿它跟请求体的
+	// Env 直接比：本包这边已经有两套并存的编码——请求体是 0=现网 / 1=沙箱，响应里的
+	// OrderEnvType 是 1=现网 / 2=沙箱。这个字段属哪一套，要真机联调才敢定。
 	Env int `json:"Env"`
 	// WeChatPayInfo 微信支付信息。非微信支付渠道可能没有。
 	WeChatPayInfo *WeChatPayInfo `json:"WeChatPayInfo"`
@@ -280,8 +299,13 @@ type IOSRefundQueryNotify struct {
 
 // ParseNotification 解析一次推送：读请求体 → 验签 → 识别事件 → 反序列化为对应结构。
 //
-// token 是 MP 后台「开发管理 → 消息推送配置」里的 **Token 令牌**——不是支付凭据，
-// 也别和 AppKey 搞混。
+// 入参：
+//
+//	token  MP 后台「开发管理 → 消息推送配置」里的 **Token 令牌**——不是支付凭据，也别和
+//	       AppKey、AppSecret 搞混，三者互不通用。必填。
+//	r      微信推过来的那一次 HTTP 请求（handler 里的 *http.Request）。本方法会读它的
+//	       body（**上限 1 MiB**，超了报错）与 URL 上的 timestamp / nonce / signature；
+//	       只读不写，应答由调用方自己写。
 //
 // 只支持 **JSON 报文 + 明文模式**：MP 后台「消息推送配置」里两项都要配对——数据格式
 // 选 JSON、消息加解密方式选明文。配成 XML 或安全模式，推送都会被拒，本方法会直接
@@ -291,6 +315,9 @@ type IOSRefundQueryNotify struct {
 //
 // 任何一步不过都返回错误，此时 **Notification 为 nil**。返回错误时应当回失败应答
 // 让微信重试——**绝不要在验签失败时仍然发货**。
+//
+// ⚠️ 反过来，**解析成功也不等于报文可信**：报文体不参与验签，验签只证明请求来自微信。
+// 真正的防重放/防伪造靠你自己的幂等与订单归属校验（见 notify_verify.go 开头）。
 //
 // 本方法只管解析，不管应答，也不管你怎么处理：回什么、什么时候回，都由调用方决定。
 // 应答体就是两个普通结构体——Ack（普通事件）与 IOSRefundQueryResponse（iOS 退款
@@ -365,29 +392,20 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 		notif.Event = EventIOSRefundQuery
 	}
 
-	// 注意：必须让 notif 的字段与 target 指向**同一个对象**。
-	// 写成 `notif.GoodsDeliver, target = &X{}, &X{}` 会创建两个不同的实例，
-	// 反序列化填的是 target，而 notif 上挂的是另一个空对象——解析结果永远为空。
 	var target any
 	switch notif.Event {
 	case EventGoodsDeliver:
-		v := &GoodsDeliverNotify{}
-		notif.GoodsDeliver, target = v, v
+		target = attachPayload(&notif.GoodsDeliver)
 	case EventCoinPay:
-		v := &CoinPayNotify{}
-		notif.CoinPay, target = v, v
+		target = attachPayload(&notif.CoinPay)
 	case EventRefund:
-		v := &RefundNotify{}
-		notif.Refund, target = v, v
+		target = attachPayload(&notif.Refund)
 	case EventComplaint:
-		v := &ComplaintNotify{}
-		notif.Complaint, target = v, v
+		target = attachPayload(&notif.Complaint)
 	case EventWxpayCallback:
-		v := &WxpayCallbackNotify{}
-		notif.WxpayCallback, target = v, v
+		target = attachPayload(&notif.WxpayCallback)
 	case EventIOSRefundQuery:
-		v := &IOSRefundQueryNotify{}
-		notif.IOSRefundQuery, target = v, v
+		target = attachPayload(&notif.IOSRefundQuery)
 	default:
 		// 未知事件不报错：微信将来可能新增事件类型，报错会让对接方在微信加字段时
 		// 突然收不到任何推送。返回带 Event 的 Notification，由调用方决定怎么处理。
@@ -398,6 +416,18 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
+}
+
+// attachPayload 新建一个载荷对象，挂到 dst 指向的字段上，并把它作为反序列化目标返回。
+//
+// 要害是**只 new 一次**：挂上 Notification 的那个对象与拿去 Unmarshal 的必须同一实例。
+// 手写成 `notif.X, target = &X{}, &X{}` 会造出两个对象——反序列化填的是后者，调用方
+// 从前者读到的却是空载荷，于是「解析成功、字段全空」。泛型参数让这个写法不可能出现：
+// 返回值只能来自这次 new，无法再凭空凑出第二个实例。
+func attachPayload[T any](dst **T) *T {
+	v := new(T)
+	*dst = v
+	return v
 }
 
 // maxNotifyBodySize 限制推送请求体大小，防止超大报文打爆内存。
@@ -436,41 +466,4 @@ func isIOSRefundQueryPayload(plain []byte) bool {
 		return false
 	}
 	return probe.ChannelBill != "" && probe.BundleID != ""
-}
-
-// Ack 是 ErrCode 形态的推送应答，普通推送事件都用它。
-//
-// 本包对应答不做任何加工——直接 json.Marshal 写出去即可，Content-Type 用
-// application/json; charset=utf-8。
-//
-// 成功（微信不再重推）：
-//
-//	Ack{ErrCode: 0, ErrMsg: "success"}
-//
-// ⚠️ **务必确认发货真的落地了再回成功**——回了成功但没发货，微信不会重试，
-// 这笔单就永久丢了。
-//
-// 失败（微信会按 2、4、8、16… 的间隔重试，最多 15 次）：
-//
-//	Ack{ErrCode: 1, ErrMsg: err.Error()}
-type Ack struct {
-	// ErrCode 应答状态。0 表示成功，其他值微信会重试。
-	ErrCode int `json:"ErrCode"`
-	// ErrMsg 错误信息，用于调试。成功时官方示例给的是 "success"。
-	ErrMsg string `json:"ErrMsg"`
-}
-
-// IOSRefundQueryResponse 是 iOS 退款问询的应答内容。
-//
-// 这条问询的应答**不是** Ack 那种 ErrCode 形态，只能用它——回错了微信当无效应答，
-// 而 Apple 只问询三次、每次 3 秒，错过等于把判定权交出去。
-//
-// ⚠️ 必须在 **3 秒内**返回；这条路径上不要查库、不要调外部接口，否则会被判为「不确定」。
-type IOSRefundQueryResponse struct {
-	// ResultCode 结果码：0-放过，建议退款；1-拦截，拒绝退款。
-	ResultCode int32 `json:"result_code"`
-	// ResultInfo 结果描述。
-	ResultInfo string `json:"result_info"`
-	// Evidence 决策凭据（**必填**），业务需给出建议退款/拒绝退款的依据，用于退款审计。
-	Evidence string `json:"evidence"`
 }

@@ -2,19 +2,97 @@ package wechat_virtualpay_go
 
 import (
 	"context"
+	"fmt"
+	"unicode/utf8"
 )
 
-// 广告金这一批（7 个接口）的官方文档质量明显低于支付主链路：请求体里的 env 字段
-// 注释统一写着「仅作为签名校验（查询的结果都是正式环境的）」，但它们的 query 参数
-// 表里**并没有 pay_sig**——两处互相矛盾。
+// 本文件是官方 /xpay/* 里「广告金」这一类 7 个接口：
 //
-// 取舍偏向「不签名」，理由是那句注释不足采信：「仅作为签名校验」是**跨页复制的
-// 模板文字**，明确需要 pay_sig 的 query_biz_balance 页上同样有这句。而「不签名」
-// 一侧有三处独立证据——query 参数表、HTTPS 示例 URL（`?access_token=ACCESS_TOKEN`）、
-// 注意事项，都不含 pay_sig。
+//	POST /xpay/query_transfer_account     查询广告金充值账户    access_token
+//	POST /xpay/query_adver_funds          查询广告金发放记录    access_token
+//	POST /xpay/create_funds_bill          充值广告金            access_token
+//	POST /xpay/bind_transfer_accout       绑定广告金充值账户    access_token
+//	POST /xpay/query_funds_bill           查询广告金充值记录    access_token
+//	POST /xpay/query_recover_bill         查询广告金回收记录    access_token
+//	POST /xpay/download_adverfunds_order  下载广告金对应订单    access_token
 //
-// 故本包按参数表实现（authAccessTokenOnly，不签名）。若实测返回 268490003，
-// 把对应调用的 authAccessTokenOnly 改为 authPaySig 即可。
+// ⚠️ 七个都在**最粗的那一档**：只带 access_token，没有 pay_sig。但官方这几页的请求体里
+// 有一句跨页复制的模板文字，说 env「仅作为签名校验（查询的结果都是正式环境的）」——它跟
+// 这几页自己的参数表**互相矛盾**：参数表里根本没有 pay_sig 这一项。
+//
+// 本包按参数表实现（不签名）。理由是那句注释不足采信：「仅作为签名校验」是模板文字，
+// 连**明确需要 pay_sig** 的 query_biz_balance 页上都有同一句。而「不签名」一侧有三处
+// 各自独立的证据——query 参数表、HTTPS 示例 URL（只有 ?access_token=ACCESS_TOKEN）、
+// 注意事项，三处都没有 pay_sig。三比一，且多的一边是模板。
+//
+// ⚠️ 也正因为不签名，本类的 env 既不参与签名、也不切换数据源：官方写明查询结果都是
+// **正式环境**的，传 env=1 不会得到沙箱数据。它仍然留在请求体里（官方字段表确实有这一行），
+// 取值照样只允许 0/1（见 checkEnv）。
+//
+// 真机联调时若这七个里有哪个回了 268490003（签名错误），把它换到 PostWithPaySig 即可：
+// 每个函数只需多收一个 appKey 参数、多一行 checkAppKey。
+//
+// 「`pre-rewrite` 分支上那份被删掉的实现」这七个也全是 `callMerchant`（即本档）——两次
+// 照同一张参数表读出的结论一致。不算独立证据，但至少说明这不是这一次新押的注。
+//
+// 本类的本地校验遵循同一条规则，只有两半：
+//
+//  1. **官方字段表标了必填的，空值/零值在本地拦**（本类不少必填字段在广告金这条链路上
+//     是「用户手上现成的东西」，漏传只会在微信侧变成一个语焉不详的参数错误）。
+//  2. **从语义推得不可能成立的**也拦：金额（单位分）不可能 <= 0，时间区间不可能反着写，
+//     必填的时间戳不可能是 0（unix 秒的 0 是 1970 年，只可能是漏填）。这半条是**推出来的**，
+//     不是文档写的，注释里逐条注明。
+//
+// 金额单位一律是**分**（与资金类的元不同；见 xpay_funds.go 文件头的单位说明）。
+//
+// 其余约定与订单类**逐字同义**，不在这里重抄（见 xpay_order.go 文件头）：凭据显式传参、
+// env 是请求结构体上的一个裸 int（0=现网 / 1=沙箱）、字段顺序照官方字段表逐行抄、
+// 响应**原值返回**、`err == nil` 不等于成功（成败看 resp.ErrCode）、失败时响应为 nil。
+//
+// 文件按接口分段，每段是「枚举 → 请求结构体 → 本地校验 → 响应结构体 → 调用函数」，
+// 读一个接口只需要看一段。
+
+// AdFundType 是广告金发放原因。查询时用它筛选，充值时要说明这笔钱来自哪一类广告金。
+//
+// ⚠️ 零值是 AdFundTypeGeneral(0)「通用赠送」，**不是**「未设置」——所以按类型筛选时
+// 它是一个有意义的取值，不能用「零值＝不筛」来判断。查询侧的 AdFundFilter.FundType 因此
+// 是**指针**：nil 才是「不按类型筛」（理由见那个字段）。
+type AdFundType int
+
+const (
+	AdFundTypeGeneral AdFundType = 0 // 通用赠送
+	AdFundTypeAd      AdFundType = 1 // 广告激励
+	AdFundTypeTarget  AdFundType = 2 // 定向激励
+)
+
+// checkUnixRange 校验一对「开始/结束」unix 秒级时间戳。
+//
+// required 为 true 表示这两个时间戳都是必填的（官方字段表里没标可选）：那样 0 就是漏填
+// ——unix 秒的 0 是 1970 年，不可能是本意。为 false 时（AdFundFilter 那三个）只查「既然
+// 填了就得成区间」，两个都不填是合法的「不按时间筛」。
+//
+// 区间一律取**闭区间**语义（end >= begin 就放行）：官方没说这两端是开是闭，而相等这种
+// 退化情形在「就查这一秒」时是能解释的，不值得为它编一条规则。
+func checkUnixRange(begin, end int64, what string, required bool) error {
+	if required {
+		if begin <= 0 {
+			return fmt.Errorf("wechat_virtualpay_go: %s 的开始时间戳必须为正的 unix 秒（0 是 1970 年，只会是漏填）", what)
+		}
+		if end <= 0 {
+			return fmt.Errorf("wechat_virtualpay_go: %s 的结束时间戳必须为正的 unix 秒（0 是 1970 年，只会是漏填）", what)
+		}
+	}
+	if begin != 0 && end != 0 && end < begin {
+		return fmt.Errorf("wechat_virtualpay_go: %s 的结束时间(%d) 早于开始时间(%d)", what, end, begin)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// 1/7  query_transfer_account —— 查询广告金充值账户
+//
+//	POST /xpay/query_transfer_account  access_token
+// ---------------------------------------------------------------------------
 
 // TransferAccountState 是广告金充值账户的审核状态。
 type TransferAccountState int
@@ -26,6 +104,9 @@ const (
 )
 
 // TransferAccountBindResult 是广告金充值账户的绑定结果。
+//
+// ⚠️ 这套取值**从 1 开始**（没有 0）：零值不在取值集合里，读到 0 说明响应里根本没回
+// 这个字段（多半是账户还没走到绑定那一步），不要当成某个具体结果。
 type TransferAccountBindResult int
 
 const (
@@ -43,161 +124,376 @@ type TransferAccount struct {
 	TransferAccountAgencyID int64 `json:"transfer_account_agency_id"`
 	// TransferAccountAgencyName 充值账户服务商账号名称。
 	TransferAccountAgencyName string `json:"transfer_account_agency_name"`
-	// State 审核状态。
+	// State 审核状态，取值见 TransferAccountState。
 	State TransferAccountState `json:"state"`
-	// BindResult 绑定结果。
+	// BindResult 绑定结果，取值见 TransferAccountBindResult。
+	//
+	// ⚠️ 取值从 1 开始，零值不在集合里——见那个类型的说明。
 	BindResult TransferAccountBindResult `json:"bind_result"`
 	// ErrorMsg 错误信息。
+	//
+	// ⚠️ 字段名是 error_msg（**不是**公共头那个 errmsg）：它是**这一个账户**的问题说明，
+	// 与响应整体的成败是两件事——查得到账户列表（errcode=0）不代表每个账户都没问题。
 	ErrorMsg string `json:"error_msg"`
 }
 
-// QueryTransferAccountRequest 是查询广告金充值账户的请求。
+// QueryTransferAccountRequest 是查询广告金充值账户的请求体。
 type QueryTransferAccountRequest struct {
-	// Env 环境标识。本包只支持现网，固定为 0。
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。不填即现网——零值正好是 0，而且
+	// requestBody 还会替你兜一个 0（官方把这个字段标为必填）。
+	//
+	// ⚠️ 本类**不签名**，而且官方写明查询结果都是正式环境的：这里填 1 既不会签出沙箱签名，
+	// 也不会查到沙箱数据（见文件头）。
 	Env int `json:"env"`
 }
 
-// QueryTransferAccountResponse 是查询广告金充值账户的响应。
+// validate 没有可查的字段：本请求体只有 env，而 env 由 checkEnv 查（0/1 之外都在本地
+// 拦下）。留着这个方法是为了让本类七个接口的调用形状一样。
+func (r QueryTransferAccountRequest) validate() error { return nil }
+
+// QueryTransferAccountResponse 是查询广告金充值账户的响应体。
 type QueryTransferAccountResponse struct {
-	// AcctList 广告金充值账户列表。
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
+	// AcctList 广告金充值账户列表。没绑定过就是空列表，不是错误。
 	AcctList []TransferAccount `json:"acct_list"`
 }
 
 // QueryTransferAccount 查询广告金充值账户。
 //
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证。自研小程序传 GetStableAccessToken 换来的 access_token，第三方
+//	             平台代商家调用传 authorizer_access_token——两者在这里是同一种东西。
+//	req          只有 Env（本类不签名，所以没有 appKey 参数，见文件头）。
+//
 // 官方文档：POST /xpay/query_transfer_account
-func (c *Client) QueryTransferAccount(ctx context.Context, req QueryTransferAccountRequest) (*QueryTransferAccountResponse, error) {
+func QueryTransferAccount(ctx context.Context, accessToken string, req QueryTransferAccountRequest) (*QueryTransferAccountResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
 	var resp QueryTransferAccountResponse
-	if err := c.call(ctx, "/xpay/query_transfer_account", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/query_transfer_account", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-// AdFundType 是广告金发放原因。
-type AdFundType int
-
-const (
-	AdFundTypeGeneral AdFundType = 0 // 通用赠送
-	AdFundTypeAd      AdFundType = 1 // 广告激励
-	AdFundTypeTarget  AdFundType = 2 // 定向激励
-)
+// ---------------------------------------------------------------------------
+// 2/7  query_adver_funds —— 查询广告金发放记录
+//
+//	POST /xpay/query_adver_funds  access_token
+// ---------------------------------------------------------------------------
 
 // AdFundFilter 是查询广告金发放记录的过滤条件。
+//
+// 三个字段可以一个都不填，那表示「不筛」。但**「不筛」要传 nil，不要传 `&AdFundFilter{}`**：
+// QueryAdverFundsRequest.Filter 是带 omitempty 的**指针**，两者的类型相同、线上字节不同
+// ——nil 时 filter 这一栏整个不出现，`&AdFundFilter{}` 会发出一个空对象（`"filter":{}`）。
+// omitempty 只省 nil 指针，不省「指向零值的非 nil 指针」。官方没有说过空 filter 等价于不传，
+// 所以这个差别不能想当然地抹平；xpay_adverfunds_test.go 的请求体用例把两种字节都钉住了。
 type AdFundFilter struct {
-	// SettleBegin 结算周期开始时间，unix 秒级时间戳。
+	// SettleBegin 结算周期开始时间，unix 秒级时间戳。不填＝不按结算周期筛。
 	SettleBegin int64 `json:"settle_begin,omitempty"`
-	// SettleEnd 结算周期结束时间，unix 秒级时间戳。
+	// SettleEnd 结算周期结束时间，unix 秒级时间戳。不填＝不按结算周期筛。
 	SettleEnd int64 `json:"settle_end,omitempty"`
-	// FundType 广告金发放原因。使用指针以区分「不筛选」与「筛选 0（通用赠送）」。
+	// FundType 广告金发放原因。**指针**：用 nil 区分「不按类型筛」与「筛通用赠送」。
+	//
+	// ⚠️ 必须是指针。AdFundType 的零值是 AdFundTypeGeneral(0) 这个**有意义的取值**，
+	// 换成值类型就再也表达不出「不筛类型」——两个意图会挤在同一个零值上，而 omitempty
+	// 又会把 0 静默省掉，于是「筛通用赠送」变成「不筛」。
 	FundType *AdFundType `json:"fund_type,omitempty"`
 }
 
-// QueryAdverFundsRequest 是查询广告金发放记录的请求。
+func (f AdFundFilter) validate() error {
+	return checkUnixRange(f.SettleBegin, f.SettleEnd, "AdFundFilter 的结算周期", false)
+}
+
+// QueryAdverFundsRequest 是查询广告金发放记录的请求体。
 type QueryAdverFundsRequest struct {
-	// Page 查询页码，不小于 1。
+	// Page 查询页码，不小于 1。不填（0）表示不传这一项，由微信用默认值。
 	Page int `json:"page,omitempty"`
-	// PageSize 每页记录数量。
+	// PageSize 每页记录数量。不填（0）表示不传这一项，由微信用默认值。
+	//
+	// ⚠️ 官方没给最大值：本包**不设上限**——多大的页算太大是微信自己的事，本地编一个
+	// 上限只会把某天官方放宽后的合法请求挡在门外。
 	PageSize int `json:"page_size,omitempty"`
-	// Filter 查询过滤条件。
+	// Filter 查询过滤条件。nil＝不筛。
 	Filter *AdFundFilter `json:"filter,omitempty"`
-	// Env 环境标识。本包只支持现网，固定为 0。
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
+}
+
+func (r QueryAdverFundsRequest) validate() error {
+	// 0 是「这一项不传」（omitempty 会把它省掉），所以只需要拦负数；正数就是官方说的
+	// 「不小于 1」。
+	if r.Page < 0 {
+		return fmt.Errorf("wechat_virtualpay_go: Page %d 非法，官方要求不小于 1（不传请留 0）", r.Page)
+	}
+	if r.PageSize < 0 {
+		return fmt.Errorf("wechat_virtualpay_go: PageSize %d 非法，每页条数不能为负（不传请留 0）", r.PageSize)
+	}
+	if r.Filter != nil {
+		return r.Filter.validate()
+	}
+	return nil
 }
 
 // AdverFund 是一条广告金发放记录。
 type AdverFund struct {
-	SettleBegin  int64      `json:"settle_begin"`  // 结算周期开始时间，unix 秒级时间戳
-	SettleEnd    int64      `json:"settle_end"`    // 结算周期结束时间，unix 秒级时间戳
-	TotalAmount  int64      `json:"total_amount"`  // 发放广告金金额，单位分
-	RemainAmount int64      `json:"remain_amount"` // 剩余可用广告金金额，单位分
-	ExpireTime   int64      `json:"expire_time"`   // 广告金过期时间，unix 秒级时间戳
-	FundType     AdFundType `json:"fund_type"`     // 广告金发放原因
-	FundID       string     `json:"fund_id"`       // 广告金发放 ID
+	// SettleBegin 结算周期开始时间，unix 秒级时间戳。
+	SettleBegin int64 `json:"settle_begin"`
+	// SettleEnd 结算周期结束时间，unix 秒级时间戳。
+	SettleEnd int64 `json:"settle_end"`
+	// TotalAmount 发放广告金金额，**单位分**。
+	TotalAmount int64 `json:"total_amount"`
+	// RemainAmount 剩余可用广告金金额，**单位分**。
+	RemainAmount int64 `json:"remain_amount"`
+	// ExpireTime 广告金过期时间，unix 秒级时间戳。
+	ExpireTime int64 `json:"expire_time"`
+	// FundType 广告金发放原因，取值见 AdFundType。
+	FundType AdFundType `json:"fund_type"`
+	// FundID 广告金发放 ID。它也是 create_funds_bill 与 download_adverfunds_order
+	// 要传的那个 fund_id。
+	FundID string `json:"fund_id"`
 }
 
-// QueryAdverFundsResponse 是查询广告金发放记录的响应。
+// QueryAdverFundsResponse 是查询广告金发放记录的响应体。
 type QueryAdverFundsResponse struct {
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
 	// AdverFundsList 广告金发放记录列表。
 	AdverFundsList []AdverFund `json:"adver_funds_list"`
-	// TotalPage 查询命中总的页数。
+	// TotalPage 查询命中总的页数（用来翻页：Page 从 1 到 TotalPage）。
 	TotalPage int `json:"total_page"`
 }
 
 // QueryAdverFunds 查询广告金发放记录。
 //
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证，同 QueryTransferAccount。
+//	req          分页与过滤条件（可以不筛，全空即按默认分页拉）。
+//
+// 翻页靠响应里的 TotalPage；每条记录的 FundID 就是充值时要用的那个 id。
+//
 // 官方文档：POST /xpay/query_adver_funds
-func (c *Client) QueryAdverFunds(ctx context.Context, req QueryAdverFundsRequest) (*QueryAdverFundsResponse, error) {
+func QueryAdverFunds(ctx context.Context, accessToken string, req QueryAdverFundsRequest) (*QueryAdverFundsResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
 	var resp QueryAdverFundsResponse
-	if err := c.call(ctx, "/xpay/query_adver_funds", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/query_adver_funds", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-// CreateFundsBillRequest 是充值广告金的请求。
+// ---------------------------------------------------------------------------
+// 3/7  create_funds_bill —— 充值广告金
 //
-// 充值金额单位是**分**（与 CreateWithdrawOrder 的元不同）。
+//	POST /xpay/create_funds_bill  access_token
+// ---------------------------------------------------------------------------
+
+// CreateFundsBillRequest 是充值广告金的请求体。
+//
+// ⚠️ 金额单位是**分**（transfer_amount），与资金类的「元」不同——见 xpay_funds.go 文件头。
 type CreateFundsBillRequest struct {
-	// TransferAmount 充值金额，单位分。
+	// TransferAmount 充值金额，**单位分**。
 	TransferAmount int64 `json:"transfer_amount"`
-	// TransferAccountUID 充值账户 uid。
+	// TransferAccountUID 充值账户 uid，来自 QueryTransferAccount。
 	TransferAccountUID int64 `json:"transfer_account_uid"`
-	// TransferAccountName 充值账户名称。
+	// TransferAccountName 充值账户名称，来自 QueryTransferAccount。
 	TransferAccountName string `json:"transfer_account_name"`
-	// TransferAccountAgencyID 充值账户服务商账号 id。
+	// TransferAccountAgencyID 充值账户服务商账号 id，来自 QueryTransferAccount。
 	TransferAccountAgencyID int64 `json:"transfer_account_agency_id"`
 	// RequestID 每一次请求的唯一 id（不超过 1024 字符）。
-	// **相同 id 的不同请求会被视为重复请求**——这是本接口的幂等键。
+	//
+	// **相同 id 的不同请求会被视为重复请求**——这就是本接口的幂等键：网络超时后拿同一个
+	// RequestID 重试是安全的，换一个 id 重试就可能充两次。资金类那条 CreateWithdrawOrder
+	// 靠 WithdrawNo 去重，这里靠它。
 	RequestID string `json:"request_id"`
 	// SettleBegin 充值所使用的广告金对应的结算周期开始时间，unix 秒级时间戳。
 	SettleBegin int64 `json:"settle_begin"`
 	// SettleEnd 充值所使用的广告金对应的结算周期结束时间，unix 秒级时间戳。
 	SettleEnd int64 `json:"settle_end"`
 	// AuthorizeAdvertise 是否授权广告数据：0 否，1 是。
+	//
+	// ⚠️ 这一栏本包**不校验取值**（与订单类的枚举同一条规矩：枚举的语义由微信定，
+	// 本地编一个取值表就等于替官方冻结了协议）。
 	AuthorizeAdvertise int `json:"authorize_advertise"`
-	// FundType 广告金发放原因。
+	// FundType 广告金发放原因，取值见 AdFundType。同样不做本地取值校验。
 	FundType AdFundType `json:"fund_type"`
-	// Env 环境标识。本包只支持现网，固定为 0。
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
 }
 
-// CreateFundsBillResponse 是充值广告金的响应。
+func (r CreateFundsBillRequest) validate() error {
+	if r.TransferAmount <= 0 {
+		return fmt.Errorf("wechat_virtualpay_go: TransferAmount 必须大于 0（单位分）——充值一笔 0 或负数的广告金没有含义")
+	}
+	if r.TransferAccountUID == 0 {
+		return fmt.Errorf("wechat_virtualpay_go: TransferAccountUID 不能为 0（必填，来自 QueryTransferAccount）")
+	}
+	if r.TransferAccountName == "" {
+		return fmt.Errorf("wechat_virtualpay_go: TransferAccountName 不能为空（必填，来自 QueryTransferAccount）")
+	}
+	if r.TransferAccountAgencyID == 0 {
+		return fmt.Errorf("wechat_virtualpay_go: TransferAccountAgencyID 不能为 0（必填，来自 QueryTransferAccount）")
+	}
+	if r.RequestID == "" {
+		return fmt.Errorf("wechat_virtualpay_go: RequestID 不能为空——它是本接口的幂等键，空着等于放弃重试保护")
+	}
+	// 1024 这条是官方写的（「不超过 1024 字符」），不是推的。按**字符**数，不按字节——
+	// 官方那句话用的就是「字符」这个词，而一个汉字占 3 字节，拿 len() 去比会把 342 个汉字
+	// 就判成超限，把合法请求拦在本地（本地拦是看不见的，比服务端回一个明确错误更难查）。
+	// ⚠️ 万一实测微信其实按字节算，超长的那部分（最多 4 倍）会在服务端被拒——那时把这里
+	// 换成 len() 即可，一行的事。
+	if n := utf8.RuneCountInString(r.RequestID); n > 1024 {
+		return fmt.Errorf("wechat_virtualpay_go: RequestID 超过 1024 字符（当前 %d），官方上限是 1024", n)
+	}
+	if err := checkUnixRange(r.SettleBegin, r.SettleEnd, "充值对应的结算周期", true); err != nil {
+		return err
+	}
+	// AuthorizeAdvertise / FundType 不做取值校验，理由见字段注释。
+	return nil
+}
+
+// CreateFundsBillResponse 是充值广告金的响应体。
 type CreateFundsBillResponse struct {
-	// BillID 充值单 id。
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
+	// BillID 充值单 id。拿它调 QueryFundsBill 查这笔充值成没成。
 	BillID string `json:"bill_id"`
 }
 
 // CreateFundsBill 充值广告金。
 //
-// 幂等靠 RequestID：相同 RequestID 的重复请求会被微信识别为重复。
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证，同 QueryTransferAccount。
+//	req          充值账户三件套 + 金额（**分**）+ 幂等键 RequestID + 结算周期。
+//
+// ⚠️ 受理成功**不等于**充值到账：拿返回的 BillID 调 QueryFundsBill 查到
+// FundsBillSuccess 才算成。
 //
 // 官方文档：POST /xpay/create_funds_bill
-func (c *Client) CreateFundsBill(ctx context.Context, req CreateFundsBillRequest) (*CreateFundsBillResponse, error) {
+func CreateFundsBill(ctx context.Context, accessToken string, req CreateFundsBillRequest) (*CreateFundsBillResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
 	var resp CreateFundsBillResponse
-	if err := c.call(ctx, "/xpay/create_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/create_funds_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-// BindTransferAccountRequest 是绑定广告金充值账户的请求。
+// ---------------------------------------------------------------------------
+// 4/7  bind_transfer_accout —— 绑定广告金充值账户
+//
+//	POST /xpay/bind_transfer_accout  access_token
+//
+// ⚠️ 路径里的 **accout** 是微信官方的拼写（少一个 n），不是本包的笔误——照着
+// "account" 去改会打到 404 上。
+// ---------------------------------------------------------------------------
+
+// BindTransferAccountRequest 是绑定广告金充值账户的请求体。
 type BindTransferAccountRequest struct {
 	// TransferAccountUID 充值账户 uid。
-	TransferAccountUID int64 `json:"transfer_account_uid,omitempty"`
+	TransferAccountUID int64 `json:"transfer_account_uid"`
 	// TransferAccountOrgName 充值账户主体名称。
-	TransferAccountOrgName string `json:"transfer_account_org_name,omitempty"`
-	// Env 环境标识。本包只支持现网，固定为 0。
+	TransferAccountOrgName string `json:"transfer_account_org_name"`
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
+}
+
+func (r BindTransferAccountRequest) validate() error {
+	if r.TransferAccountUID == 0 {
+		return fmt.Errorf("wechat_virtualpay_go: TransferAccountUID 不能为 0（绑定的就是它）")
+	}
+	if r.TransferAccountOrgName == "" {
+		return fmt.Errorf("wechat_virtualpay_go: TransferAccountOrgName 不能为空（绑定的就是它）")
+	}
+	return nil
+}
+
+// BindTransferAccountResponse 是绑定广告金充值账户的响应体。
+//
+// 它没有自己的字段：微信只回公共头。仍然留着这个类型，因为**没有自己的字段不等于不会
+// 失败**——绑定成没成、失败是哪种，都要有地方读 errcode（同 StartUploadGoodsResponse）。
+type BindTransferAccountResponse struct {
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
 }
 
 // BindTransferAccount 绑定广告金充值账户。
 //
-// 官方文档：POST /xpay/bind_transfer_accout
-// （路径里的 accout 是微信官方的拼写，不是笔误，改动会导致 404。）
-func (c *Client) BindTransferAccount(ctx context.Context, req BindTransferAccountRequest) error {
-	return c.call(ctx, "/xpay/bind_transfer_accout", req, authAccessTokenOnly, "", nil)
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证，同 QueryTransferAccount。
+//	req          要绑的账户 uid 与主体名称。
+//
+// 绑成没成看 resp.ErrCode；绑完可以调 QueryTransferAccount 查审核状态与绑定结果。
+//
+// ⚠️ 两栏都按**必填**处理。依据是绑定这个动作的输入就是这两样，缺一个构不成一次绑定；
+// 本包也没有独立核过官方这两栏的可选标记（广告金这条链路的文档在开发机上取不到）。若实测
+// 官方确实允许只传其中一样，去掉那一条校验即可。
+//
+// ⚠️ 这是本类里**本包与旧实现不一致**的唯一一处：「`pre-rewrite` 分支上那份被删掉的实现」
+// 给这两栏都挂了 `omitempty`，值空就不发（于是 uid=0 时会把一个空请求体发出去）。本包
+// 改成必填，是**有意的收紧**——空 uid 的绑定请求没有任何意义，与其发出去换一个语焉不详的
+// 参数错误，不如在本地拦下。
+//
+// 官方文档：POST /xpay/bind_transfer_accout（拼写见上面的 ⚠️）
+func BindTransferAccount(ctx context.Context, accessToken string, req BindTransferAccountRequest) (*BindTransferAccountResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
+	var resp BindTransferAccountResponse
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/bind_transfer_accout", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
+
+// ---------------------------------------------------------------------------
+// 5/7  query_funds_bill —— 查询广告金充值记录
+//
+//	POST /xpay/query_funds_bill  access_token
+// ---------------------------------------------------------------------------
 
 // FundsBillStatus 是广告金充值单状态。
 type FundsBillStatus int
@@ -210,45 +506,85 @@ const (
 
 // FundsBillFilter 是查询广告金充值记录的过滤条件。
 type FundsBillFilter struct {
-	// OperTimeBegin 查询充值开始时间，unix 秒级时间戳。
+	// OperTimeBegin 查询充值开始时间，unix 秒级时间戳（按充值时间筛，不是按结算周期）。
 	OperTimeBegin int64 `json:"oper_time_begin"`
 	// OperTimeEnd 查询充值结束时间，unix 秒级时间戳。
 	OperTimeEnd int64 `json:"oper_time_end"`
-	// BillID 广告金充值单 ID，可选。
+	// BillID 广告金充值单 ID，可选。在时间区间之上再精确到这一单（create_funds_bill 返回的
+	// 那个）。
+	//
+	// ⚠️ 它不是时间区间的**替代品**。上面两个时间戳是必填的（官方字段表里没标可选：旧实现
+	// 里只有本栏与 RequestID 带着「可选」字样），validate 因此要求它们为正——所以「只按单号
+	// 查」在这里是「把时间区间给成能罩住那一单的范围」，不是「不填时间区间」。
 	BillID string `json:"bill_id,omitempty"`
-	// RequestID 调用 CreateFundsBill 时传入的 request_id，可选。
+	// RequestID 调 CreateFundsBill 时传入的 request_id，可选。用途与 BillID 相同，也是
+	// **叠在时间区间之上**的精确条件。
+	//
+	// ⚠️ 它有用在：拿不到 BillID 时用自己的 RequestID 反查（比如超时重试后想确认头一次到底
+	// 成没成），此时时间区间给成那次尝试前后。两个 ID 都填也能查到，但官方没说这时按哪个
+	// 生效——要精确就一次只填一个。
 	RequestID string `json:"request_id,omitempty"`
 }
 
-// QueryFundsBillRequest 是查询广告金充值记录的请求。
+func (f FundsBillFilter) validate() error {
+	return checkUnixRange(f.OperTimeBegin, f.OperTimeEnd, "FundsBillFilter 的充值时间", true)
+}
+
+// QueryFundsBillRequest 是查询广告金充值记录的请求体。
 type QueryFundsBillRequest struct {
 	// Page 查询页码，不小于 1。
 	Page int `json:"page"`
 	// PageSize 每页记录数量。
 	PageSize int `json:"page_size"`
-	// Filter 查询过滤条件。
+	// Filter 查询过滤条件。**值类型**（不是指针）：本接口的过滤条件是必填的，没有
+	// 「不筛」这个选项——至少得给出要查哪段时间。里面的 BillID / RequestID 只是在此之上
+	// 缩小范围，填了它们也仍然要有时间区间（见 FundsBillFilter 那两个字段）。
 	Filter FundsBillFilter `json:"filter"`
-	// Env 环境标识。本包只支持现网，固定为 0。
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
+}
+
+func (r QueryFundsBillRequest) validate() error {
+	if r.Page < 1 {
+		return fmt.Errorf("wechat_virtualpay_go: Page %d 非法，官方要求不小于 1（必填）", r.Page)
+	}
+	if r.PageSize < 1 {
+		return fmt.Errorf("wechat_virtualpay_go: PageSize %d 非法，每页条数要大于 0（必填）", r.PageSize)
+	}
+	return r.Filter.validate()
 }
 
 // FundsBill 是一条广告金充值记录。
 type FundsBill struct {
 	// BillID 充值单 ID。
-	BillID              string          `json:"bill_id"`
-	OperTime            int64           `json:"oper_time"`             // 充值时间，unix 秒级时间戳
-	SettleBegin         int64           `json:"settle_begin"`          // 结算周期开始时间
-	SettleEnd           int64           `json:"settle_end"`            // 结算周期结束时间
-	FundID              string          `json:"fund_id"`               // 对应广告金 ID
-	TransferAccountName string          `json:"transfer_account_name"` // 充值账户
-	TransferAccountUID  int64           `json:"transfer_account_uid"`  // 充值账户 UID
-	TransferAmount      int64           `json:"transfer_amount"`       // 充值金额，单位分
-	Status              FundsBillStatus `json:"status"`                // 充值状态
-	RequestID           string          `json:"request_id"`            // 充值时的 request_id
+	BillID string `json:"bill_id"`
+	// OperTime 充值时间，unix 秒级时间戳。
+	OperTime int64 `json:"oper_time"`
+	// SettleBegin 结算周期开始时间，unix 秒级时间戳。
+	SettleBegin int64 `json:"settle_begin"`
+	// SettleEnd 结算周期结束时间，unix 秒级时间戳。
+	SettleEnd int64 `json:"settle_end"`
+	// FundID 对应广告金 ID。
+	FundID string `json:"fund_id"`
+	// TransferAccountName 充值账户。
+	TransferAccountName string `json:"transfer_account_name"`
+	// TransferAccountUID 充值账户 UID。
+	TransferAccountUID int64 `json:"transfer_account_uid"`
+	// TransferAmount 充值金额，**单位分**。
+	TransferAmount int64 `json:"transfer_amount"`
+	// Status 充值状态，取值见 FundsBillStatus。
+	//
+	// ⚠️ 零值是 FundsBillProcessing(0)「充值中」——查到一个 0 说明还没到终态，**不是**
+	// 成功也不是失败，要接着轮询。
+	Status FundsBillStatus `json:"status"`
+	// RequestID 充值时的 request_id（就是 CreateFundsBill 传的那个）。
+	RequestID string `json:"request_id"`
 }
 
-// QueryFundsBillResponse 是查询广告金充值记录的响应。
+// QueryFundsBillResponse 是查询广告金充值记录的响应体。
 type QueryFundsBillResponse struct {
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
 	// BillList 广告金充值记录列表。
 	BillList []FundsBill `json:"bill_list"`
 	// TotalPage 查询命中总的页数。
@@ -257,14 +593,39 @@ type QueryFundsBillResponse struct {
 
 // QueryFundsBill 查询广告金充值记录。
 //
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证，同 QueryTransferAccount。
+//	req          分页 + 充值记录过滤条件（充值时间区间必填——官方字段表里没标可选；
+//	             BillID/RequestID 是在这段时间之上可选的精确条件，不能单独替代它）。
+//
+// 查一笔充值到底成没成，就是拿到 BillID 后在这里查 Status 到终态。
+//
 // 官方文档：POST /xpay/query_funds_bill
-func (c *Client) QueryFundsBill(ctx context.Context, req QueryFundsBillRequest) (*QueryFundsBillResponse, error) {
+func QueryFundsBill(ctx context.Context, accessToken string, req QueryFundsBillRequest) (*QueryFundsBillResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
 	var resp QueryFundsBillResponse
-	if err := c.call(ctx, "/xpay/query_funds_bill", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/query_funds_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
+
+// ---------------------------------------------------------------------------
+// 6/7  query_recover_bill —— 查询广告金回收记录
+//
+//	POST /xpay/query_recover_bill  access_token
+// ---------------------------------------------------------------------------
 
 // RecoverBillFilter 是查询广告金回收记录的过滤条件。
 type RecoverBillFilter struct {
@@ -272,37 +633,75 @@ type RecoverBillFilter struct {
 	RecoverTimeBegin int64 `json:"recover_time_begin"`
 	// RecoverTimeEnd 查询回收结束时间，unix 秒级时间戳。
 	RecoverTimeEnd int64 `json:"recover_time_end"`
-	// BillID 广告金回收单 ID。文档标为必填，但说明里又写"(可选)"，此处按必填处理。
+	// BillID 广告金回收单 ID。
+	//
+	// ⚠️ 官方这一栏**自相矛盾**：字段表的「必填」列标着必填，说明文字里却写着「(可选)」。
+	// 本包按**必填**处理——理由是这一条与上面那两栏不同：时间区间已经能筛出一批记录，
+	// 而「没有时间区间就查不了」的接口在别处也有先例；更实际的一层是，本栏没有 omitempty
+	// （永远会被发出去），若它真可选，漏填时微信收到的就是一个空串，不如在本地就说清。
+	// 若实测官方允许空着查全部，去掉这条校验并给它加 omitempty。
 	BillID string `json:"bill_id"`
 }
 
-// QueryRecoverBillRequest 是查询广告金回收记录的请求。
+func (f RecoverBillFilter) validate() error {
+	if f.BillID == "" {
+		return fmt.Errorf("wechat_virtualpay_go: RecoverBillFilter.BillID 不能为空（官方字段表标必填，说明文字却写「可选」——本包按必填处理，见字段注释）")
+	}
+	return checkUnixRange(f.RecoverTimeBegin, f.RecoverTimeEnd, "RecoverBillFilter 的回收时间", true)
+}
+
+// QueryRecoverBillRequest 是查询广告金回收记录的请求体。
 type QueryRecoverBillRequest struct {
 	// Page 查询页码，不小于 1。
 	Page int `json:"page"`
 	// PageSize 每页记录数量。
 	PageSize int `json:"page_size"`
-	// Filter 查询过滤条件。
+	// Filter 查询过滤条件。**值类型**：同 QueryFundsBillRequest，过滤条件必填。
 	Filter RecoverBillFilter `json:"filter"`
-	// Env 环境标识。本包只支持现网，固定为 0。
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
 }
 
-// RecoverBill 是一条广告金回收记录。
-type RecoverBill struct {
-	// BillID 回收单 ID。
-	BillID             string   `json:"bill_id"`
-	RecoverTime        int64    `json:"recover_time"`         // 回收时间，unix 秒级时间戳
-	SettleBegin        int64    `json:"settle_begin"`         // 结算周期开始时间
-	SettleEnd          int64    `json:"settle_end"`           // 结算周期结束时间
-	FundID             string   `json:"fund_id"`              // 对应的发放广告金 ID
-	RecoverAccountName string   `json:"recover_account_name"` // 回收广告金账户
-	RecoverAmount      int64    `json:"recover_amount"`       // 回收金额，单位分
-	RefundOrderList    []string `json:"refund_order_list"`    // 对应的退款订单 id
+func (r QueryRecoverBillRequest) validate() error {
+	if r.Page < 1 {
+		return fmt.Errorf("wechat_virtualpay_go: Page %d 非法，官方要求不小于 1（必填）", r.Page)
+	}
+	if r.PageSize < 1 {
+		return fmt.Errorf("wechat_virtualpay_go: PageSize %d 非法，每页条数要大于 0（必填）", r.PageSize)
+	}
+	return r.Filter.validate()
 }
 
-// QueryRecoverBillResponse 是查询广告金回收记录的响应。
+// RecoverBill 是一条广告金回收记录。
+//
+// 回收（recover）与充值（funds_bill）方向相反：退款发生时，之前发放的广告金会被按比例
+// 收回，这就是回收记录的来源。
+type RecoverBill struct {
+	// BillID 回收单 ID。
+	BillID string `json:"bill_id"`
+	// RecoverTime 回收时间，unix 秒级时间戳。
+	RecoverTime int64 `json:"recover_time"`
+	// SettleBegin 结算周期开始时间，unix 秒级时间戳。
+	SettleBegin int64 `json:"settle_begin"`
+	// SettleEnd 结算周期结束时间，unix 秒级时间戳。
+	SettleEnd int64 `json:"settle_end"`
+	// FundID 对应的发放广告金 ID。
+	FundID string `json:"fund_id"`
+	// RecoverAccountName 回收广告金账户。
+	RecoverAccountName string `json:"recover_account_name"`
+	// RecoverAmount 回收金额，**单位分**。
+	RecoverAmount int64 `json:"recover_amount"`
+	// RefundOrderList 对应的退款订单 id 列表。
+	//
+	// ⚠️ 它是**数组**：一次回收通常对应一笔退款，但官方没有承诺一对一，别按「取第一个」
+	// 去写——按笔对账要把列表整个走一遍。
+	RefundOrderList []string `json:"refund_order_list"`
+}
+
+// QueryRecoverBillResponse 是查询广告金回收记录的响应体。
 type QueryRecoverBillResponse struct {
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
 	// BillList 广告金回收记录列表。
 	BillList []RecoverBill `json:"bill_list"`
 	// TotalPage 查询命中总的页数。
@@ -311,40 +710,93 @@ type QueryRecoverBillResponse struct {
 
 // QueryRecoverBill 查询广告金回收记录。
 //
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证，同 QueryTransferAccount。
+//	req          分页 + 回收记录过滤条件（时间区间与 BillID 都必填，见 RecoverBillFilter）。
+//
 // 官方文档：POST /xpay/query_recover_bill
-func (c *Client) QueryRecoverBill(ctx context.Context, req QueryRecoverBillRequest) (*QueryRecoverBillResponse, error) {
+func QueryRecoverBill(ctx context.Context, accessToken string, req QueryRecoverBillRequest) (*QueryRecoverBillResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
 	var resp QueryRecoverBillResponse
-	if err := c.call(ctx, "/xpay/query_recover_bill", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/query_recover_bill", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-// DownloadAdverFundsOrderRequest 是下载广告金对应商户订单信息的请求。
+// ---------------------------------------------------------------------------
+// 7/7  download_adverfunds_order —— 下载广告金对应的商户订单信息
+//
+//	POST /xpay/download_adverfunds_order  access_token
+// ---------------------------------------------------------------------------
+
+// DownloadAdverFundsOrderRequest 是下载广告金对应商户订单信息的请求体。
 type DownloadAdverFundsOrderRequest struct {
-	// FundID 广告金发放 ID。
+	// FundID 广告金发放 ID，来自 QueryAdverFunds 里某条记录的 FundID。
 	FundID string `json:"fund_id"`
-	// Env 环境标识。本包只支持现网，固定为 0。
+	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
 }
 
-// DownloadAdverFundsOrderResponse 是下载广告金对应商户订单信息的响应。
+func (r DownloadAdverFundsOrderRequest) validate() error {
+	if r.FundID == "" {
+		return fmt.Errorf("wechat_virtualpay_go: FundID 不能为空（来自 QueryAdverFunds 的 FundID）")
+	}
+	return nil
+}
+
+// DownloadAdverFundsOrderResponse 是下载广告金对应商户订单信息的响应体。
 type DownloadAdverFundsOrderResponse struct {
+	// 公共头（errcode/errmsg）内嵌在最前面，调用方用 resp.ErrCode 直接读。
+	ResponseHeader
 	// URL 订单下载链接。
+	//
+	// ⚠️ 第一次调用**很可能拿到空串**：那一趟只是触发生成，链接还没做出来。空串不是错误
+	// （errcode 仍是 0），要隔一会儿再调一次（见下面的调用说明）。
 	URL string `json:"url"`
 }
 
 // DownloadAdverFundsOrder 下载广告金对应的商户订单信息。
 //
-// ⚠️ 文档的「注意事项」有两条，本方法不会替你处理：
-//   - **仅支持通用赠送广告金**（fund_type=0）对应订单的下载；
-//   - **第一次调用只触发生成下载 url**，返回的 url 可能尚未生成，需间隔轮询再次
-//     调用才能拿到最终链接。
+// 入参：
+//
+//	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
+//	accessToken  调用凭证，同 QueryTransferAccount。
+//	req          广告金发放 ID（来自 QueryAdverFunds）。
+//
+// ⚠️ 官方「注意事项」有两条，本方法不会替你处理，得调用方自己记着：
+//
+//  1. **只支持通用赠送广告金**（FundType = AdFundTypeGeneral，即 fund_type=0）对应订单的
+//     下载；广告激励/定向激励那两种拿不到。
+//  2. **第一次调用只触发生成下载 url**，返回的 URL 可能尚未生成——要间隔轮询再调，
+//     直到拿到非空的 URL 为止。判据是**URL 非空**，不是 errcode（空 URL 时 errcode 为 0，
+//     所以「err == nil」在这里只说明这一趟走通了）。
 //
 // 官方文档：POST /xpay/download_adverfunds_order
-func (c *Client) DownloadAdverFundsOrder(ctx context.Context, req DownloadAdverFundsOrderRequest) (*DownloadAdverFundsOrderResponse, error) {
+func DownloadAdverFundsOrder(ctx context.Context, accessToken string, req DownloadAdverFundsOrderRequest) (*DownloadAdverFundsOrderResponse, error) {
+	if err := checkAccessToken(accessToken); err != nil {
+		return nil, err
+	}
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
 	var resp DownloadAdverFundsOrderResponse
-	if err := c.call(ctx, "/xpay/download_adverfunds_order", req, authAccessTokenOnly, "", &resp); err != nil {
+	if err := PostTokenOnly(ctx, accessToken, "/xpay/download_adverfunds_order", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
