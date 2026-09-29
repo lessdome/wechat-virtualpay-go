@@ -14,18 +14,19 @@ import (
 // /xpay/* 的 access_token），而 Go 的 http.Client 会把**整个 URL 连 query** 写进
 // url.Error 的文案——原样带出去就等于把 AppSecret 送进调用方的日志与错误上报。
 //
-// 这张表刻意只收「凭据在 URL 上」的那两条：GetStableAccessToken 的 secret 在**请求体**
+// 这张表刻意只收「凭据在 URL 上」的那三条：GetStableAccessToken 的 secret 在**请求体**
 // 里，报文不进 error，把它加进来这条测试对它永远成立——无意义地绿，比没有更坏。
 func TestTransportErrorDoesNotLeakCredentials(t *testing.T) {
 	const secret = "S3CRET-MUST-NOT-APPEAR"
 	netErr := errors.New("dial tcp: lookup api.weixin.qq.com: no such host")
 
-	// 两个包级 client 各换一次，注入同一个传输层错误。
-	oldToken, oldXpay := tokenHTTPClient, xpayHTTPClient
+	// 三个包级 client 各换一次，注入同一个传输层错误。
+	oldToken, oldSession, oldXpay := tokenHTTPClient, sessionHTTPClient, xpayHTTPClient
 	tokenHTTPClient = &http.Client{Transport: errRT{err: netErr}}
+	sessionHTTPClient = &http.Client{Transport: errRT{err: netErr}}
 	xpayHTTPClient = &http.Client{Transport: errRT{err: netErr}}
 	t.Cleanup(func() {
-		tokenHTTPClient, xpayHTTPClient = oldToken, oldXpay
+		tokenHTTPClient, sessionHTTPClient, xpayHTTPClient = oldToken, oldSession, oldXpay
 	})
 
 	ctx := context.Background()
@@ -35,6 +36,10 @@ func TestTransportErrorDoesNotLeakCredentials(t *testing.T) {
 	}{
 		{"GetAccessToken", func() error { // secret 在 query 上
 			_, err := GetAccessToken(ctx, "wxapp", secret)
+			return err
+		}},
+		{"Code2Session", func() error { // secret 在 query 上
+			_, err := Code2Session(ctx, "wxapp", secret, "code123")
 			return err
 		}},
 		{"QueryOrder", func() error { // access_token 在 query 上（第三个参数故意用 secret 顶）

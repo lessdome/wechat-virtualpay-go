@@ -83,14 +83,23 @@ func TestCode2SessionWithoutUnionID(t *testing.T) {
 	}
 }
 
-// 40029 code 无效：错误里要带上错误码与 errmsg
+// 40029 code 无效：**这不是 error**，errcode/errmsg 原值带回，好让调用方按值分支
 func TestCode2SessionInvalidCode(t *testing.T) {
 	rt := &sessionRT{body: `{"errcode":40029,"errmsg":"invalid code"}`}
 	swapClient(t, rt)
 
-	_, err := Code2Session(context.Background(), "a", "b", "bad")
-	if err == nil || !strings.Contains(err.Error(), "40029") || !strings.Contains(err.Error(), "invalid code") {
-		t.Fatalf("期望带出 40029 与 errmsg，实际: %v", err)
+	got, err := Code2Session(context.Background(), "a", "b", "bad")
+	if err != nil {
+		t.Fatalf("业务失败不该是 error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("业务失败也要把响应给出来")
+	}
+	if got.ErrCode != 40029 || got.ErrMsg != "invalid code" {
+		t.Errorf("errcode/errmsg 应原值返回: %+v", got)
+	}
+	if got.OpenID != "" || got.SessionKey != "" {
+		t.Errorf("失败时不该有登录态: %+v", got)
 	}
 }
 
