@@ -336,6 +336,18 @@ func TestAdverFundsRequestBodies(t *testing.T) {
 			`{"filter":{"settle_begin":100,"settle_end":200},"env":0}`,
 		},
 		{
+			// 与上一条「不筛」放一起看：都是「三个字段全空」，线上字节却不同——nil 时
+			// filter 整栏不出现，&AdFundFilter{} 会发出一个空对象。omitempty 只省 nil
+			// 指针，不省指向零值的非 nil 指针。别把这两条合并。
+			"query_adver_funds 传一个空 filter（≠ 不传）",
+			"/xpay/query_adver_funds",
+			func(ctx context.Context) error {
+				_, err := QueryAdverFunds(ctx, "T", QueryAdverFundsRequest{Filter: &AdFundFilter{}})
+				return err
+			},
+			`{"filter":{},"env":0}`,
+		},
+		{
 			"create_funds_bill",
 			"/xpay/create_funds_bill",
 			func(ctx context.Context) error {
@@ -643,6 +655,22 @@ func TestAdverFundsValidation(t *testing.T) {
 			_, err := CreateFundsBill(ctx, "T", r)
 			return err
 		}},
+		// 上面两条是 ASCII——一个字符一字节，字符数、字节数、消息里的数字三者相同，所以
+		// 它们钉不住「按字符还是按字节」。官方那句话的原话是「不超过 1024 字符」，下面这两条
+		// 才真的钉住：1024 个汉字是 3072 字节，按字节算会被本地错杀，而报错里那个数也必须是
+		// 字符数（1025）而不是字节数（3075）。
+		{"幂等键 1024 个汉字（3072 字节，按字符算要放行）", "", func() error {
+			r := okCreate()
+			r.RequestID = strings.Repeat("字", 1024)
+			_, err := CreateFundsBill(ctx, "T", r)
+			return err
+		}},
+		{"幂等键 1025 个汉字", "1025", func() error {
+			r := okCreate()
+			r.RequestID = strings.Repeat("字", 1025)
+			_, err := CreateFundsBill(ctx, "T", r)
+			return err
+		}},
 		{"结算周期没填（0＝漏填）", "1970", func() error {
 			r := okCreate()
 			r.SettleBegin, r.SettleEnd = 0, 0
@@ -694,6 +722,15 @@ func TestAdverFundsValidation(t *testing.T) {
 		{"充值记录：时间区间没填", "1970", func() error {
 			r := okFundsBill()
 			r.Filter.OperTimeBegin, r.Filter.OperTimeEnd = 0, 0
+			_, err := QueryFundsBill(ctx, "T", r)
+			return err
+		}},
+		// BillID/RequestID 是**叠在时间区间之上**的精确条件，不是它的替代品——单号填了、
+		// 时间区间没填，仍然在本地拦（官方字段表把两个时间戳标为必填，见 FundsBillFilter）。
+		{"充值记录：只填单号、不给时间区间（仍要拦）", "1970", func() error {
+			r := okFundsBill()
+			r.Filter.OperTimeBegin, r.Filter.OperTimeEnd = 0, 0
+			r.Filter.BillID = "B1"
 			_, err := QueryFundsBill(ctx, "T", r)
 			return err
 		}},

@@ -888,8 +888,10 @@ func QueryPunishmentReasons(ctx context.Context, accessToken, appKey string) (*Q
 	if err := checkAccessToken(accessToken); err != nil {
 		return nil, err
 	}
-	// 没有 env 可传，checkEnv 这一步在这里不适用；appKey 按 env=0（现网）报错文案。
-	if err := checkAppKey(appKey, 0); err != nil {
+	// 没有 env 可传：checkEnv 不适用，appKey 也用 checkAppKeyNoEnv——本接口的请求体固定是
+	// `{}`，说「Env=0 须配现网 AppKey」会把调用方支到一个根本不存在的字段上（账单类同样
+	// 没有 env，用的是同一个助手）。
+	if err := checkAppKeyNoEnv(appKey); err != nil {
 		return nil, err
 	}
 

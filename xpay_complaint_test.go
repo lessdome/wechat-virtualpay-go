@@ -486,8 +486,11 @@ func TestQueryPunishmentReasonsSendsEmptyBody(t *testing.T) {
 	}
 }
 
-// 没有 req 形参的那两个函数：appKey 为空时要报**现网**那把的错（本接口没有 env，也就没有
-// 沙箱这一说）。
+// 没有 req 形参的那两个函数：两把凭据各自为空都要在本地拦下。
+//
+// appKey 这条文案**不该**提 env：本接口的请求体固定是 `{}`，没有 env 字段可配，说「Env=0
+// 须配现网 AppKey」会把调用方支到一个不存在的地方去——所以走的是 checkAppKeyNoEnv（账单类
+// 同样没有 env，用的也是它）。这条断言钉的就是「别退回成 checkAppKey(appKey, 0)」。
 func TestQueryPunishmentReasonsCredentialErrors(t *testing.T) {
 	rt := &xpayRT{resp: `{"errcode":0}`}
 	swapXpay(t, rt)
@@ -497,8 +500,11 @@ func TestQueryPunishmentReasonsCredentialErrors(t *testing.T) {
 		t.Fatalf("缺 accessToken 应当报错，实际: %v", err)
 	}
 	_, err := QueryPunishmentReasons(context.Background(), "T", "")
-	if err == nil || !strings.Contains(err.Error(), "现网") {
-		t.Fatalf("缺 appKey 的文案应当指明是现网那把，实际: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "appKey") {
+		t.Fatalf("缺 appKey 应当报错，实际: %v", err)
+	}
+	if err != nil && strings.Contains(err.Error(), "Env=") {
+		t.Fatalf("本接口没有 env 字段，文案不该提 Env（会指向一个不存在的字段），实际: %v", err)
 	}
 	if rt.calls != 0 {
 		t.Fatalf("参数不合法却发出了 %d 次请求", rt.calls)

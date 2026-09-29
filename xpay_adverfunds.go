@@ -3,6 +3,7 @@ package wechat_virtualpay_go
 import (
 	"context"
 	"fmt"
+	"unicode/utf8"
 )
 
 // 本文件是官方 /xpay/* 里「广告金」这一类 7 个接口：
@@ -194,9 +195,11 @@ func QueryTransferAccount(ctx context.Context, accessToken string, req QueryTran
 
 // AdFundFilter 是查询广告金发放记录的过滤条件。
 //
-// 三个字段可以一个都不填：那表示「不筛」。**整体是 nil 与「填一个零值结构体」在这里
-// 是同一件事**（都是三个字段全空），所以 QueryAdverFundsRequest.Filter 用指针只是为了让
-// 「不传 filter」这个意图在类型上看得见，不影响发出去的内容。
+// 三个字段可以一个都不填，那表示「不筛」。但**「不筛」要传 nil，不要传 `&AdFundFilter{}`**：
+// QueryAdverFundsRequest.Filter 是带 omitempty 的**指针**，两者的类型相同、线上字节不同
+// ——nil 时 filter 这一栏整个不出现，`&AdFundFilter{}` 会发出一个空对象（`"filter":{}`）。
+// omitempty 只省 nil 指针，不省「指向零值的非 nil 指针」。官方没有说过空 filter 等价于不传，
+// 所以这个差别不能想当然地抹平；xpay_adverfunds_test.go 的请求体用例把两种字节都钉住了。
 type AdFundFilter struct {
 	// SettleBegin 结算周期开始时间，unix 秒级时间戳。不填＝不按结算周期筛。
 	SettleBegin int64 `json:"settle_begin,omitempty"`
@@ -357,9 +360,13 @@ func (r CreateFundsBillRequest) validate() error {
 	if r.RequestID == "" {
 		return fmt.Errorf("wechat_virtualpay_go: RequestID 不能为空——它是本接口的幂等键，空着等于放弃重试保护")
 	}
-	// 1024 这条是官方写的（「不超过 1024 字符」），不是推的。
-	if len(r.RequestID) > 1024 {
-		return fmt.Errorf("wechat_virtualpay_go: RequestID 超过 1024 字符（当前 %d），官方上限是 1024", len(r.RequestID))
+	// 1024 这条是官方写的（「不超过 1024 字符」），不是推的。按**字符**数，不按字节——
+	// 官方那句话用的就是「字符」这个词，而一个汉字占 3 字节，拿 len() 去比会把 342 个汉字
+	// 就判成超限，把合法请求拦在本地（本地拦是看不见的，比服务端回一个明确错误更难查）。
+	// ⚠️ 万一实测微信其实按字节算，超长的那部分（最多 4 倍）会在服务端被拒——那时把这里
+	// 换成 len() 即可，一行的事。
+	if n := utf8.RuneCountInString(r.RequestID); n > 1024 {
+		return fmt.Errorf("wechat_virtualpay_go: RequestID 超过 1024 字符（当前 %d），官方上限是 1024", n)
 	}
 	if err := checkUnixRange(r.SettleBegin, r.SettleEnd, "充值对应的结算周期", true); err != nil {
 		return err
@@ -503,12 +510,18 @@ type FundsBillFilter struct {
 	OperTimeBegin int64 `json:"oper_time_begin"`
 	// OperTimeEnd 查询充值结束时间，unix 秒级时间戳。
 	OperTimeEnd int64 `json:"oper_time_end"`
-	// BillID 广告金充值单 ID，可选。填了就是查这一单（create_funds_bill 返回的那个）。
-	BillID string `json:"bill_id,omitempty"`
-	// RequestID 调 CreateFundsBill 时传入的 request_id，可选。
+	// BillID 广告金充值单 ID，可选。在时间区间之上再精确到这一单（create_funds_bill 返回的
+	// 那个）。
 	//
-	// ⚠️ 它与 BillID 是**两条独立的路**：拿不到 BillID 时可以用自己的 RequestID 反查
-	// （比如超时重试后想确认头一次到底成没成）。两个都填也能查到，但官方没说这时按哪个
+	// ⚠️ 它不是时间区间的**替代品**。上面两个时间戳是必填的（官方字段表里没标可选：旧实现
+	// 里只有本栏与 RequestID 带着「可选」字样），validate 因此要求它们为正——所以「只按单号
+	// 查」在这里是「把时间区间给成能罩住那一单的范围」，不是「不填时间区间」。
+	BillID string `json:"bill_id,omitempty"`
+	// RequestID 调 CreateFundsBill 时传入的 request_id，可选。用途与 BillID 相同，也是
+	// **叠在时间区间之上**的精确条件。
+	//
+	// ⚠️ 它有用在：拿不到 BillID 时用自己的 RequestID 反查（比如超时重试后想确认头一次到底
+	// 成没成），此时时间区间给成那次尝试前后。两个 ID 都填也能查到，但官方没说这时按哪个
 	// 生效——要精确就一次只填一个。
 	RequestID string `json:"request_id,omitempty"`
 }
@@ -524,7 +537,8 @@ type QueryFundsBillRequest struct {
 	// PageSize 每页记录数量。
 	PageSize int `json:"page_size"`
 	// Filter 查询过滤条件。**值类型**（不是指针）：本接口的过滤条件是必填的，没有
-	// 「不筛」这个选项——至少得给出要查哪段时间。
+	// 「不筛」这个选项——至少得给出要查哪段时间。里面的 BillID / RequestID 只是在此之上
+	// 缩小范围，填了它们也仍然要有时间区间（见 FundsBillFilter 那两个字段）。
 	Filter FundsBillFilter `json:"filter"`
 	// Env 调用环境：**0=现网（默认）/ 1=沙箱**。本类不签名、也不切换数据源，见文件头。
 	Env int `json:"env"`
@@ -583,7 +597,8 @@ type QueryFundsBillResponse struct {
 //
 //	ctx          请求上下文，超时与取消由它管（client 另有 15 秒超时兜底）。
 //	accessToken  调用凭证，同 QueryTransferAccount。
-//	req          分页 + 充值记录过滤条件（充值时间区间必填，BillID/RequestID 可选）。
+//	req          分页 + 充值记录过滤条件（充值时间区间必填——官方字段表里没标可选；
+//	             BillID/RequestID 是在这段时间之上可选的精确条件，不能单独替代它）。
 //
 // 查一笔充值到底成没成，就是拿到 BillID 后在这里查 Status 到终态。
 //
