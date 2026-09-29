@@ -113,6 +113,46 @@ func TestSignatures(t *testing.T) {
 	}
 }
 
+// env 是下单唯一能选环境的地方：零值即现网（"env":0），沙箱要显式传 1。
+//
+// 只钉「发出去的是哪个数」——**AppKey 与环境配不配套，本包分辨不了**（两把都是普通
+// 字符串），那条只能靠调用方保证，测不了。
+func TestPaymentEnv(t *testing.T) {
+	// 零值=现网。上面两条逐字比对里已经钉了 "env":0，这里再挡一道「有人把零值改没了」。
+	if p := build(t, goodsReq()); !strings.Contains(p.SignData, `"env":0`) {
+		t.Fatalf("不填 Env 应当是现网 0: %s", p.SignData)
+	}
+
+	r := goodsReq()
+	r.Env = 1 // 沙箱
+	p := build(t, r)
+	if !strings.Contains(p.SignData, `"env":1`) {
+		t.Fatalf("Env=沙箱 时 signData 里应当是 1: %s", p.SignData)
+	}
+	// 签名必须由**改过 env 的**那份 signData 算出——独立复算，不复用 CalcPaySig。
+	mac := hmac.New(sha256.New, []byte(testAppKey))
+	mac.Write([]byte("requestVirtualPayment&" + p.SignData))
+	if want := hex.EncodeToString(mac.Sum(nil)); p.PaySig != want {
+		t.Errorf("paySig 复算不一致（got %s want %s）", p.PaySig, want)
+	}
+}
+
+// env 非法（官方只有 0/1）本地就拒，别带着它去算签名；沙箱下缺 AppKey 时，报错要点出
+// 该配的是沙箱那把——与 /xpay/* 那边的报错一致。
+func TestPaymentEnvValidation(t *testing.T) {
+	r := goodsReq()
+	r.Env = 2
+	if _, err := BuildPayment(testOfferID, testAppKey, testSessionKey, r); err == nil || !strings.Contains(err.Error(), "Env 2 非法") {
+		t.Fatalf("Env 非法应当本地报错，实际: %v", err)
+	}
+
+	r = goodsReq()
+	r.Env = 1 // 沙箱
+	if _, err := BuildPayment(testOfferID, "", testSessionKey, r); err == nil || !strings.Contains(err.Error(), "沙箱 AppKey") {
+		t.Fatalf("沙箱下缺 appKey 要指明沙箱那把，实际: %v", err)
+	}
+}
+
 // 它是纯拼装：一次网络请求都不发
 func TestDoesNotTouchNetwork(t *testing.T) {
 	rt := &sessionRT{body: `{"openid":"o","session_key":"s"}`}

@@ -50,14 +50,13 @@ type VirtualPaymentParams struct {
 // PaymentRequest 是一次下单的**订单参数**。凭据（offerID / appKey / sessionKey）不走
 // 这里，是 BuildPayment 的参数。
 //
-// 字段与官方 signData 结构表一一对应。表里共 9 个字段，其中三个不按单变化，由本包
-// 固定或从凭据来：
+// 字段与官方 signData 结构表一一对应。表里共 9 个字段，其中两个不按单变化，由本包
+// 从凭据固定：
 //
 //	offerId        ← 函数参数 offerID（商户级）
-//	env            ← 固定 0（本包只支持现网）
 //	currencyType   ← 固定 CNY（官方目前只支持这一种）
 //
-// 剩下 6 个按单变化的都在下面。
+// 剩下 7 个按单变化的都在下面（含环境 env）。
 type PaymentRequest struct {
 	// Mode 支付类型。必填——选错模式会走错流程（买道具还是充代币，金额的含义完全不同），
 	// 所以本包不替你猜默认值。
@@ -67,6 +66,12 @@ type PaymentRequest struct {
 	// 另有一处反证：客户端错误码 -15018 写「代币或者道具 productId 审核不通过」，
 	// 字面上把两者连在一起。真机联调时要确认。
 	Mode PaymentMode
+	// Env 调用环境（signData 的 env）：**0=现网（默认）/ 1=沙箱**，不填即现网。
+	//
+	// ⚠️ **AppKey 与环境绑死**：env=0 必须配现网 AppKey、env=1 必须配沙箱 AppKey，两把
+	// 混用微信侧会判签名错误。本包分不出传进来的是哪一把（都是普通字符串），这条只能靠
+	// 调用方自己保证。
+	Env int
 	// ProductID 道具 ID。**仅道具直购需要**；代币充值传了会报错。
 	ProductID string
 	// GoodsPrice 道具单价，单位**分**。**仅道具直购需要**；代币充值传了会报错。
@@ -116,16 +121,19 @@ var outTradeNoRe = regexp.MustCompile(`^[0-9A-Za-z_|*@-]{8,32}$`)
 
 // BuildPayment 生成一次虚拟支付的下单参数（道具直购与代币充值共用）。
 //
-// offerID / appKey / sessionKey 是三个凭据，订单本身的数据都在 req 里。
+// 入参：
 //
-// sessionKey 由本包的 Code2Session() 用前端 wx.login 的 code 换来：
+//	offerID     商户号（signData 的 offerId），在虚拟支付商户后台查看。必填。
+//	appKey      商家密钥，用来算 pay_sig。必填。
+//	sessionKey  用户会话密钥，用来算 signature；由本包的 Code2Session() 用前端 wx.login 的
+//	            code 换来。必填。两点要留意：它是**会话级**凭据、不是每单一个——同一次登录态
+//	            可以下多笔单；它会**过期**，过期的表现是服务端报 268490009、客户端报 -15007，
+//	            届时让前端重新 wx.login 再换一把。
+//	req         订单参数（环境、模式、道具/数量、价格、单号…），字段与官方 signData 字段
+//	            表一一对应，见 PaymentRequest。⚠️ 它的 Env 与 appKey **必须配套**：env=0
+//	            配现网 AppKey、env=1 配沙箱 AppKey，混用会得到签名错误码。
 //
-//	sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
-//
-// 两点要留意：它是**会话级**凭据，不是每单一个——同一次登录态可以下多笔单；它会
-// **过期**，过期的表现是服务端报 268490009、客户端报 -15007，届时让前端重新 wx.login。
-//
-// 本函数不联网。典型用法（完整可编译可运行的版本见 ExampleBuildPayment）：
+// 本函数**不发起任何网络请求**。典型用法（完整可编译可运行的版本见 ExampleBuildPayment）：
 //
 //	outTradeNo, err := wechat_virtualpay_go.NewOutTradeNo() // 也可用自己业务的单号
 //	if err != nil {
@@ -152,8 +160,13 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 	if offerID == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: offerID 不能为空")
 	}
-	if appKey == "" {
-		return nil, fmt.Errorf("wechat_virtualpay_go: appKey 不能为空")
+	// env 必须排在 appKey 前面：appKey 的报错文案里要点出「该配现网还是沙箱那把」，
+	// 那是按 env 取的（见 checkAppKey）。
+	if err := checkEnv(req.Env); err != nil {
+		return nil, err
+	}
+	if err := checkAppKey(appKey, req.Env); err != nil {
+		return nil, err
 	}
 	if sessionKey == "" {
 		return nil, fmt.Errorf("wechat_virtualpay_go: sessionKey 不能为空（用 Code2Session 换取）")
@@ -200,7 +213,7 @@ func BuildPayment(offerID, appKey, sessionKey string, req PaymentRequest) (*Virt
 	raw, err := json.Marshal(paymentSignData{
 		OfferID:              offerID,
 		BuyQuantity:          qty,
-		Env:                  0, // 本包只支持现网环境
+		Env:                  req.Env, // 零值即现网；沙箱必须同时换沙箱 AppKey
 		CurrencyType:         "CNY",
 		ProductID:            req.ProductID,
 		GoodsPrice:           req.GoodsPrice,
