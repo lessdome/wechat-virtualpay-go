@@ -1,5 +1,7 @@
 # wechat_virtualpay_go
 
+[![CI](https://github.com/lessdome/wechat_virtualpay_go/actions/workflows/ci.yml/badge.svg)](https://github.com/lessdome/wechat_virtualpay_go/actions/workflows/ci.yml)
+
 微信小程序**虚拟支付**的服务端 Go SDK。Go 1.21+，**零第三方依赖**（只用标准库）。
 
 它管的是服务端这一半：拼下单参数、算签名、调 `/xpay/*` 接口、收推送。另一半
