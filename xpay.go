@@ -116,6 +116,20 @@ type xpayResponse interface {
 
 func (h *ResponseHeader) header() *ResponseHeader { return h }
 
+// xpayNoEnvRequest 是「请求体里**没有** env 这个字段」的接口集合，由 requestBody 认。
+//
+// 官方把 env 标成必填，绝大多数请求体里确实有它，所以那儿的兜底是给它补一个 0。但有两个
+// 接口的官方字段表里**压根没有 env 这一行**（账单类的 DownloadBill / DownloadIOSBill，
+// 见 xpay_bill.go 文件头）——给它们补一个，就是凭空多出一个文档里没有的字段。
+//
+// 所以「不要 env」得由请求结构体自己**显式**标出来。方向不能反过来（默认不补、要的才
+// 声明）：那样哪个新接口忘了声明 env，就会静默少发一个官方标为必填的字段，而这个出口
+// 没有第二道网能发现。
+//
+// 它不导出：调用方没法也不需要给自己的请求体打这个标记——要不要 env 是本包按官方参数表
+// 决定的事，不是调用方的选择。
+type xpayNoEnvRequest interface{ xpayNoEnv() }
+
 // requestBody 把请求体序列化成 JSON，并保证官方的必填字段 env 一定在。
 //
 // env 是请求结构体上的 int 字段，所以正常路径就是「按结构体
@@ -125,6 +139,10 @@ func (h *ResponseHeader) header() *ResponseHeader { return h }
 //
 // 兜底那条路要走一遍「Marshal → 拆成 map → 再 Marshal」，顶层键因此变成字典序。
 // 不影响正确性：签名与请求体是同一份字节，微信按收到的原文校验，不关心键的顺序。
+//
+// 唯一的例外是官方字段表里没有 env 的那两个接口：它们实现了 xpayNoEnvRequest，这里就
+// 原样发、连键序都不动（上面那句「微信不关心键的顺序」只对补过 env 的那些成立——不补的
+// 那些，字节与文档的字段表就应当逐行对得上）。
 func requestBody(req any) ([]byte, error) {
 	raw, err := json.Marshal(req)
 	if err != nil {
@@ -135,7 +153,13 @@ func requestBody(req any) ([]byte, error) {
 	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
 		// 传进来的不是 JSON 对象（比如误传了切片、数字，或 nil 指针序列化出的
 		// "null"）。必须硬失败：放过去就会发出一个 body 与签名语义对不上的请求。
+		//
+		// 这一步刻意排在下面那个例外**之前**：声明了「不带 env」不代表可以不讲形状，
+		// 那个例外只是不补字段，不是不再检查请求体。
 		return nil, fmt.Errorf("wechat_virtualpay_go: 请求体不是 JSON 对象: %s", raw)
+	}
+	if _, ok := req.(xpayNoEnvRequest); ok {
+		return raw, nil // 显式声明了不带 env：原样发，不补也不重排
 	}
 	if _, ok := obj["env"]; ok {
 		return raw, nil // 结构体自己带了 env，原样发，不碰它

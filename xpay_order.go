@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strconv"
-	"time"
 )
 
 // 本文件是官方 /xpay/* 里「订单」这一类 5 个接口：
@@ -619,21 +617,17 @@ func (c PayChannel) valid() bool {
 }
 
 // checkDateRange 校验下载任务的日期区间（官方：两个日期都是 YYYYMMDD，间隔不超过 31 天）。
+//
+// 「两个都是合法日期 + 止不早于起」那半段在 xpay_common.go 的 checkDayRange（账单类也要
+// 用，文案不能各写各的）；这里只加本接口自己的上限，所以天数差还得自己算一遍。
 func checkDateRange(begin, end int64) error {
-	// 走 time.Parse 而不是自己数位数：它会连着月、日的合法范围一起校验，
-	// 20261320 这种「8 位数但不是日期」也被拦下来。
-	b, err := time.Parse("20060102", strconv.FormatInt(begin, 10))
-	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: BeginDs %d 不是合法的 YYYYMMDD 日期", begin)
+	if err := checkDayRange(begin, end); err != nil {
+		return err
 	}
-	e, err := time.Parse("20060102", strconv.FormatInt(end, 10))
-	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: EndDs %d 不是合法的 YYYYMMDD 日期", end)
-	}
-	if e.Before(b) {
-		return fmt.Errorf("wechat_virtualpay_go: EndDs(%d) 早于 BeginDs(%d)", end, begin)
-	}
-	// 用 UTC 解析，天数差因此是精确的 24 小时整数倍，不受夏令时影响。
+	// 上面已经验过两个日期都合法，这次的解析不会失败。用 UTC 解析，天数差因此是精确的
+	// 24 小时整数倍，不受夏令时影响。
+	b, _ := parseDay8(begin)
+	e, _ := parseDay8(end)
 	// 边界按「含」处理：20260420 到 20260521 算 31 天，放行。
 	if days := int(e.Sub(b).Hours() / 24); days > 31 {
 		return fmt.Errorf("wechat_virtualpay_go: BeginDs 与 EndDs 相隔 %d 天，官方上限是 31 天", days)

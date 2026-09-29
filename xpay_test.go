@@ -497,7 +497,7 @@ func TestHTTPErrorIsPlainError(t *testing.T) {
 // ——碰 nil 响应立刻 panic；要是返回值类型，他会拿到一个 errcode=0 的零值响应，而那恰好
 // 是本包契约里「成功」的样子，一路静默错下去。
 //
-// 9 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
+// 11 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
 // 参数没过本地校验（一个字节都没发出去）、非 200、网络失败。
 func TestErrorReturnsNilResponse(t *testing.T) {
 	provided := true
@@ -547,6 +547,18 @@ func TestErrorReturnsNilResponse(t *testing.T) {
 		"PresentCurrency": func(tk string) (bool, error) {
 			r, err := PresentCurrency(context.Background(), tk,
 				PresentCurrencyRequest{OpenID: "o", OrderID: "p1", Amount: 5})
+			return r == nil, err
+		},
+		// 账单类 2 个：它们没有 env，但**有** appKey（pay_sig 照算），所以 appKey 那一路
+		// 校验也在这两个改动里能测到。
+		"DownloadBill": func(tk string) (bool, error) {
+			r, err := DownloadBill(context.Background(), tk, "K",
+				DownloadBillRequest{BeginDs: 20230801, EndDs: 20230810})
+			return r == nil, err
+		},
+		"DownloadIOSBill": func(tk string) (bool, error) {
+			r, err := DownloadIOSBill(context.Background(), tk, "K",
+				DownloadIOSBillRequest{StartMonth: "202601", EndMonth: "202603"})
 			return r == nil, err
 		},
 	}
