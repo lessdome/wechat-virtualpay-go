@@ -17,7 +17,7 @@ import (
 // uri 的取值：拉起支付时固定 "requestVirtualPayment"；调服务端接口时是接口路径
 // （如 "/xpay/query_order"），**不带** "?" 及其后的 query string。
 //
-// ⚠️ 消息推送的验签**不是** HMAC、也不使用 AppKey，见 notify_crypto.go。
+// ⚠️ 消息推送的验签**不是** HMAC、也不使用 AppKey，见 notify_verify.go。
 
 // hmacSHA256Hex 计算 HMAC-SHA256 并返回小写十六进制字符串。
 func hmacSHA256Hex(key, message string) string {
@@ -31,7 +31,8 @@ func hmacSHA256Hex(key, message string) string {
 // uri **不带** "?" 及其后的部分：pay_sig 的签名原文是 uri + "&" + signData，
 // uri 带上 query string 会让签名与微信侧不一致（服务端报 268490003）。
 //
-// signData 必须与实际下发/发送的字符串**字节级一致**，见 json.go 的说明。
+// signData 必须与实际下发/发送的字符串**字节级一致**：这里算的是字节，微信校验的
+// 也是字节，中间任何一次重新序列化（换了字段顺序、多了转义）都会让两边对不上。
 func CalcPaySig(appKey, uri, signData string) string {
 	return hmacSHA256Hex(appKey, uri+"&"+signData)
 }
