@@ -497,7 +497,7 @@ func TestHTTPErrorIsPlainError(t *testing.T) {
 // ——碰 nil 响应立刻 panic；要是返回值类型，他会拿到一个 errcode=0 的零值响应，而那恰好
 // 是本包契约里「成功」的样子，一路静默错下去。
 //
-// 18 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
+// 25 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
 // 参数没过本地校验（一个字节都没发出去）、非 200、网络失败。
 func TestErrorReturnsNilResponse(t *testing.T) {
 	provided := true
@@ -594,6 +594,43 @@ func TestErrorReturnsNilResponse(t *testing.T) {
 		},
 		"QueryPublishGoods": func(tk string) (bool, error) {
 			r, err := QueryPublishGoods(context.Background(), tk, "K", QueryPublishGoodsRequest{})
+			return r == nil, err
+		},
+		// 广告金类 7 个。这一档（PostTokenOnly）不签名，所以下面这些闭包都**没有 appKey**
+		// ——正好在这里顺带证明「本类的入参只有 accessToken 一把凭据」。
+		"QueryTransferAccount": func(tk string) (bool, error) {
+			r, err := QueryTransferAccount(context.Background(), tk, QueryTransferAccountRequest{})
+			return r == nil, err
+		},
+		"QueryAdverFunds": func(tk string) (bool, error) {
+			r, err := QueryAdverFunds(context.Background(), tk, QueryAdverFundsRequest{})
+			return r == nil, err
+		},
+		"CreateFundsBill": func(tk string) (bool, error) {
+			r, err := CreateFundsBill(context.Background(), tk, CreateFundsBillRequest{
+				TransferAmount: 100, TransferAccountUID: 7, TransferAccountName: "甲",
+				TransferAccountAgencyID: 9, RequestID: "r1", SettleBegin: 100, SettleEnd: 200})
+			return r == nil, err
+		},
+		"BindTransferAccount": func(tk string) (bool, error) {
+			r, err := BindTransferAccount(context.Background(), tk, BindTransferAccountRequest{
+				TransferAccountUID: 7, TransferAccountOrgName: "甲"})
+			return r == nil, err
+		},
+		"QueryFundsBill": func(tk string) (bool, error) {
+			r, err := QueryFundsBill(context.Background(), tk, QueryFundsBillRequest{
+				Page: 1, PageSize: 10, Filter: FundsBillFilter{OperTimeBegin: 100, OperTimeEnd: 200}})
+			return r == nil, err
+		},
+		"QueryRecoverBill": func(tk string) (bool, error) {
+			r, err := QueryRecoverBill(context.Background(), tk, QueryRecoverBillRequest{
+				Page: 1, PageSize: 10,
+				Filter: RecoverBillFilter{RecoverTimeBegin: 100, RecoverTimeEnd: 200, BillID: "B1"}})
+			return r == nil, err
+		},
+		"DownloadAdverFundsOrder": func(tk string) (bool, error) {
+			r, err := DownloadAdverFundsOrder(context.Background(), tk,
+				DownloadAdverFundsOrderRequest{FundID: "F1"})
 			return r == nil, err
 		},
 	}
