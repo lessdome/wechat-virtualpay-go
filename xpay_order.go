@@ -487,7 +487,8 @@ type NotifyProvideGoodsResponse struct {
 // 推送没送达、需要手动把订单改成已发货状态的兜底场景。
 //
 // ⚠️ 注意它**不需要 appKey**：官方 query 参数表里只有 access_token，没有 pay_sig
-// ——本批 5 个接口里只有它没有签名参数。这不是漏看，参数表本身就是证据。
+// ——订单这一类 5 个接口里只有它没有签名参数（代币类的 PresentCurrency 同样不带签名，
+// 见 xpay_coin.go 文件头）。这不是漏看，参数表本身就是证据。
 // 若实测 resp.ErrCode 是 268490003（签名错误），说明它其实也要 pay_sig，那时改调
 // PostWithPaySig。
 //

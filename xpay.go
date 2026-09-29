@@ -14,12 +14,15 @@ import (
 
 // 本文件是 /xpay/* 服务端接口的传输层：拼请求体、算签名、发出去、解析响应。
 //
-// 对外是三个方法，对应官方的**三档鉴权**——差别只在 query 里带哪个签名（2026-09 抓的
-// 官方 37 个接口页统计）：
+// 对外是三个方法，对应官方的**三档鉴权**——差别只在 query 里带哪个签名：
 //
-//	PostTokenOnly   只带 access_token                   9 个
-//	PostWithPaySig  access_token + pay_sig             25 个
-//	PostWithUserSig access_token + signature + pay_sig  3 个
+//	PostTokenOnly   只带 access_token                    9 个
+//	PostWithPaySig  access_token + pay_sig              21 个
+//	PostWithUserSig access_token + signature + pay_sig   3 个
+//
+// 每档几个，是按本包覆盖的 33 个 /xpay/* 接口（见 access_token.go 文件头）逐页核对 query
+// 参数表数出来的（2026-09）。**官方一共有多少个接口页，本包没有独立核实过**——文档在
+// 开发机上取不到。所以这里说的是「本包覆盖到的接口里各档有多少」，不是官方总数。
 //
 // 分三档、而不是一个方法挂可选参数，是因为「这个接口要不要签名」是接口的**固有属性**
 // （官方参数表写死的），不该由调用方每次自己判断——判断错了微信只回一个签名错误码，而
@@ -148,9 +151,10 @@ func requestBody(req any) ([]byte, error) {
 
 // PostTokenOnly 调一个**只带调用凭证**的接口：query 里除 access_token 什么都不带。
 //
-// 官方的 37 个 /xpay/* 接口里这一档有 9 个（2026-09 统计），如 notify_provide_goods
+// 本包覆盖的 33 个 /xpay/* 接口里这一档有 9 个（2026-09 逐页核对），如 notify_provide_goods
 // （通知发货完成）、present_currency（代币赠送）、query_adver_funds（广告金发放记录）。
-// 它们不碰某个用户的登录态，所以没有可签的东西。
+// 它们不碰某个用户的登录态，所以没有可签的东西。前两个本包已封装（见 xpay_order.go /
+// xpay_coin.go），第三个还没有。
 //
 // 入参（都是显式传的，本包不藏状态）：
 //
@@ -173,7 +177,7 @@ func PostTokenOnly[T xpayResponse](ctx context.Context, accessToken, uri string,
 
 // PostWithPaySig 调一个还要**支付签名**的接口：access_token + pay_sig。
 //
-// 这是多数接口所在的档（37 个里 25 个）：query_order、refund_order、投诉/订阅/账单下载/
+// 这是多数接口所在的档（33 个里 21 个）：query_order、refund_order、投诉/订阅/账单下载/
 // 道具批量上传等。签名用商家的 AppKey 算，见 CalcPaySig。
 //
 // 入参（都是显式传的，本包不藏状态）：
@@ -200,9 +204,11 @@ func PostWithPaySig[T xpayResponse](ctx context.Context, accessToken, appKey, ur
 // PostWithUserSig 调一个还要**用户态签名**的接口：access_token + signature + pay_sig。
 //
 // 官方只有 3 个接口是这一档：currency_pay（扣减代币）、cancel_currency_pay（代币退款）、
-// query_user_balance（查代币余额）。它们动的是**某个用户**的代币账户，所以除商家的
-// pay_sig 外还要一把用那个用户的 session_key 签的 signature——两把钥匙都是本方法的
-// 参数，缺一不可（见下面的入参表）。
+// query_user_balance（查代币余额）——**这三个本包已全部封装**（见 xpay_coin.go），所以
+// 正常调用用不着这个 PostXxx；留着它，是给「自己调一个还没封装的接口」用（本包还有 24 个
+// /xpay/* 没封装，见 example_test.go 的 ExamplePostWithUserSig）。它们动的是**某个用户**
+// 的代币账户，所以除商家的 pay_sig 外还要一把用那个用户的 session_key 签的 signature
+// ——两把钥匙都是本方法的参数，缺一不可（见下面的入参表）。
 //
 // 两把签名的算法不同（官方《签名详解》）：pay_sig 要把 uri 拼在 signData 前面，
 // signature = hmac_sha256(sessionKey, signData)、**不拼 uri**；两者的 signData 都是
