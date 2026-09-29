@@ -497,7 +497,7 @@ func TestHTTPErrorIsPlainError(t *testing.T) {
 // ——碰 nil 响应立刻 panic；要是返回值类型，他会拿到一个 errcode=0 的零值响应，而那恰好
 // 是本包契约里「成功」的样子，一路静默错下去。
 //
-// 14 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
+// 18 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
 // 参数没过本地校验（一个字节都没发出去）、非 200、网络失败。
 func TestErrorReturnsNilResponse(t *testing.T) {
 	provided := true
@@ -574,6 +574,26 @@ func TestErrorReturnsNilResponse(t *testing.T) {
 		},
 		"QueryBizBalance": func(tk string) (bool, error) {
 			r, err := QueryBizBalance(context.Background(), tk, "K", QueryBizBalanceRequest{})
+			return r == nil, err
+		},
+		// 道具类 4 个。两个 start_* 的响应只有公共头，正好在这里顺带钉住「它也是有响应类型
+		// 的」——老代码里这两个是裸 error，失败时没有 errcode 能交给调用方。
+		"StartUploadGoods": func(tk string) (bool, error) {
+			r, err := StartUploadGoods(context.Background(), tk, "K", StartUploadGoodsRequest{
+				UploadItem: []UploadGoodsItem{{ID: "A", Name: "n", Price: 1}}})
+			return r == nil, err
+		},
+		"QueryUploadGoods": func(tk string) (bool, error) {
+			r, err := QueryUploadGoods(context.Background(), tk, "K", QueryUploadGoodsRequest{})
+			return r == nil, err
+		},
+		"StartPublishGoods": func(tk string) (bool, error) {
+			r, err := StartPublishGoods(context.Background(), tk, "K", StartPublishGoodsRequest{
+				PublishItem: []PublishGoodsItem{{ID: "A"}}})
+			return r == nil, err
+		},
+		"QueryPublishGoods": func(tk string) (bool, error) {
+			r, err := QueryPublishGoods(context.Background(), tk, "K", QueryPublishGoodsRequest{})
 			return r == nil, err
 		},
 	}
