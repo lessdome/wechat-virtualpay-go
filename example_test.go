@@ -137,17 +137,17 @@ func ExampleQueryOrder() {
 //	PostWithPaySig  access_token + pay_sig                （21 个）
 //	PostWithUserSig access_token + signature + pay_sig    （3 个）
 //
-// 这一档官方只有 3 个接口，而本包**已经全部封装**了（见 xpay_coin.go 的 QueryUserBalance
-// / CurrencyPay / CancelCurrencyPay），所以这个示例演示的不是「还没封装的接口」，而是另一
-// 条仍然成立的路：**调用方自己定义响应结构体**直接交给 PostXxx。下面用的 uri 与请求体
-// 与官方《签名详解》里那份参考脚本**同形**（字段与 uri 都一样，取值不同；那份脚本钉在
-// sign_test.go）——想看封装后的用法，换成 QueryUserBalance 即可。
+// 官方 33 个 /xpay/* 服务端接口本包**已全部封装**（本档三个见 xpay_coin.go 的
+// QueryUserBalance / CurrencyPay / CancelCurrencyPay），所以这个示例演示的不是「还没封装的
+// 接口」，而是另一条仍然成立的路：**调用方自己定义响应结构体**直接交给 PostXxx。下面用的
+// uri 与请求体与官方《签名详解》里那份参考脚本**同形**（字段与 uri 都一样，取值不同；那份
+// 脚本钉在 sign_test.go）——想看封装后的用法，换成 QueryUserBalance 即可。
 //
 // 它**故意不写 `// Output:`**：真实调用要打微信的服务器，输出钉不住，所以这个示例只
 // **编译**、不运行。它是**外部测试包**，因此还证明了一件只有包外才验得了的事：响应结构体
-// 可以由**调用方自己定义**——只要内嵌 ResponseHeader，就满足 PostXxx 的类型约束，剩下
-// 24 个还没封装的接口不用等本包发版。约束挡的是「忘了内嵌公共头」这种错：那样 errcode
-// 会被悄悄丢掉，而 errcode 是本包唯一的失败信号。
+// 可以由**调用方自己定义**——只要内嵌 ResponseHeader，就满足 PostXxx 的类型约束。约束挡的
+// 是「忘了内嵌公共头」这种错：那样 errcode 会被悄悄丢掉，而 errcode 是本包唯一的失败信号。
+// 这条路的价值不在于绕过封装，而在于官方**新加**接口时调用方不必等本包发版。
 //
 // access_token 同样是调用方传进来的：自研小程序的用它调 GetStableAccessToken 换（见
 // ExampleGetStableAccessToken），第三方平台代商家调用的 authorizer_access_token 由

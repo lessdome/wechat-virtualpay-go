@@ -84,8 +84,8 @@ var xpayHTTPClient = &http.Client{Timeout: 15 * time.Second}
 // 它以**匿名字段**内嵌在每个响应结构体里（见 xpay_order.go），调用方用 resp.ErrCode
 // 直接读——内嵌字段会被提升，包外照样访问得到。
 //
-// 它是导出的，因为调用方用得上：本包还没逐个封装的接口，调用方自己定义响应结构体时要
-// 内嵌这个类型——三个 PostXxx 方法的 out 必须是「内嵌了 ResponseHeader 的结构体指针」
+// 它是导出的，因为调用方用得上：官方新加、本包还没跟上的接口，调用方自己定义响应结构体时
+// 要内嵌这个类型——三个 PostXxx 方法的 out 必须是「内嵌了 ResponseHeader 的结构体指针」
 // （约束见 xpayResponse）：
 //
 //	type BalanceResponse struct {
@@ -118,9 +118,11 @@ func (h *ResponseHeader) header() *ResponseHeader { return h }
 
 // xpayNoEnvRequest 是「请求体里**没有** env 这个字段」的接口集合，由 requestBody 认。
 //
-// 官方把 env 标成必填，绝大多数请求体里确实有它，所以那儿的兜底是给它补一个 0。但有两个
-// 接口的官方字段表里**压根没有 env 这一行**（账单类的 DownloadBill / DownloadIOSBill，
-// 见 xpay_bill.go 文件头）——给它们补一个，就是凭空多出一个文档里没有的字段。
+// 官方把 env 标成必填，绝大多数请求体里确实有它，所以那儿的兜底是给它补一个 0。但有三个
+// 接口的官方字段表里**没有 env 这一行**：账单类的 DownloadBill / DownloadIOSBill（见
+// xpay_bill.go 文件头），以及投诉类的 query_punishment_reasons（那一页连请求体都没有，
+// 本包发一份空的 {}，见 punishmentReasonsBody）——给它们补一个，就是凭空多出一个文档里
+// 没有的字段。
 //
 // 所以「不要 env」得由请求结构体自己**显式**标出来。方向不能反过来（默认不补、要的才
 // 声明）：那样哪个新接口忘了声明 env，就会静默少发一个官方标为必填的字段，而这个出口
@@ -140,9 +142,10 @@ type xpayNoEnvRequest interface{ xpayNoEnv() }
 // 兜底那条路要走一遍「Marshal → 拆成 map → 再 Marshal」，顶层键因此变成字典序。
 // 不影响正确性：签名与请求体是同一份字节，微信按收到的原文校验，不关心键的顺序。
 //
-// 唯一的例外是官方字段表里没有 env 的那两个接口：它们实现了 xpayNoEnvRequest，这里就
-// 原样发、连键序都不动（上面那句「微信不关心键的顺序」只对补过 env 的那些成立——不补的
-// 那些，字节与文档的字段表就应当逐行对得上）。
+// 例外是官方字段表里没有 env 的那三个接口（账单两个 + 投诉的 query_punishment_reasons
+// ——后者的官方页连请求体都没有，所以发的是一份空的 {}）：它们实现了 xpayNoEnvRequest，
+// 这里就原样发、连键序都不动（上面那句「微信不关心键的顺序」只对补过 env 的那些成立
+// ——不补的那些，字节与文档的字段表就应当逐行对得上）。
 func requestBody(req any) ([]byte, error) {
 	raw, err := json.Marshal(req)
 	if err != nil {
@@ -177,8 +180,8 @@ func requestBody(req any) ([]byte, error) {
 //
 // 本包覆盖的 33 个 /xpay/* 接口里这一档有 9 个（2026-09 逐页核对），如 notify_provide_goods
 // （通知发货完成）、present_currency（代币赠送）、query_adver_funds（广告金发放记录）。
-// 它们不碰某个用户的登录态，所以没有可签的东西。前两个本包已封装（见 xpay_order.go /
-// xpay_coin.go），第三个还没有。
+// 它们不碰某个用户的登录态，所以没有可签的东西。三个本包都已封装（见 xpay_order.go /
+// xpay_coin.go / xpay_adverfunds.go）。
 //
 // 入参（都是显式传的，本包不藏状态）：
 //
@@ -229,8 +232,8 @@ func PostWithPaySig[T xpayResponse](ctx context.Context, accessToken, appKey, ur
 //
 // 官方只有 3 个接口是这一档：currency_pay（扣减代币）、cancel_currency_pay（代币退款）、
 // query_user_balance（查代币余额）——**这三个本包已全部封装**（见 xpay_coin.go），所以
-// 正常调用用不着这个 PostXxx；留着它，是给「自己调一个还没封装的接口」用（本包还有 24 个
-// /xpay/* 没封装，见 example_test.go 的 ExamplePostWithUserSig）。它们动的是**某个用户**
+// 正常调用用不着这个 PostXxx；留着它，是给「官方新加、本包还没跟上的接口」用（写法见
+// ExamplePostWithUserSig）。它们动的是**某个用户**
 // 的代币账户，所以除商家的 pay_sig 外还要一把用那个用户的 session_key 签的 signature
 // ——两把钥匙都是本方法的参数，缺一不可（见下面的入参表）。
 //
