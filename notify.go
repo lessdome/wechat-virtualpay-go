@@ -43,6 +43,9 @@ const (
 // ErrInvalidSignature 表示推送验签失败。
 //
 // 用 errors.Is(err, ErrInvalidSignature) 判断。注意**签名不过就绝不能发货**。
+//
+// 但反过来不成立：**验签通过不等于报文可信**——签的只有 URL 上的 token/timestamp/
+// nonce，报文体不在其中。详细说明见 notify_verify.go 开头。
 var ErrInvalidSignature = errors.New("wechat_virtualpay_go: 推送验签失败")
 
 // Notification 是一次解析后的推送。
@@ -300,6 +303,9 @@ type IOSRefundQueryNotify struct {
 // 任何一步不过都返回错误，此时 **Notification 为 nil**。返回错误时应当回失败应答
 // 让微信重试——**绝不要在验签失败时仍然发货**。
 //
+// ⚠️ 反过来，**解析成功也不等于报文可信**：报文体不参与验签，验签只证明请求来自微信。
+// 真正的防重放/防伪造靠你自己的幂等与订单归属校验（见 notify_verify.go 开头）。
+//
 // 本方法只管解析，不管应答，也不管你怎么处理：回什么、什么时候回，都由调用方决定。
 // 应答体就是两个普通结构体——Ack（普通事件）与 IOSRefundQueryResponse（iOS 退款
 // 问询），本包不做任何加工，json.Marshal 写出去即可。
@@ -373,29 +379,20 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 		notif.Event = EventIOSRefundQuery
 	}
 
-	// 注意：必须让 notif 的字段与 target 指向**同一个对象**。
-	// 写成 `notif.GoodsDeliver, target = &X{}, &X{}` 会创建两个不同的实例，
-	// 反序列化填的是 target，而 notif 上挂的是另一个空对象——解析结果永远为空。
 	var target any
 	switch notif.Event {
 	case EventGoodsDeliver:
-		v := &GoodsDeliverNotify{}
-		notif.GoodsDeliver, target = v, v
+		target = attachPayload(&notif.GoodsDeliver)
 	case EventCoinPay:
-		v := &CoinPayNotify{}
-		notif.CoinPay, target = v, v
+		target = attachPayload(&notif.CoinPay)
 	case EventRefund:
-		v := &RefundNotify{}
-		notif.Refund, target = v, v
+		target = attachPayload(&notif.Refund)
 	case EventComplaint:
-		v := &ComplaintNotify{}
-		notif.Complaint, target = v, v
+		target = attachPayload(&notif.Complaint)
 	case EventWxpayCallback:
-		v := &WxpayCallbackNotify{}
-		notif.WxpayCallback, target = v, v
+		target = attachPayload(&notif.WxpayCallback)
 	case EventIOSRefundQuery:
-		v := &IOSRefundQueryNotify{}
-		notif.IOSRefundQuery, target = v, v
+		target = attachPayload(&notif.IOSRefundQuery)
 	default:
 		// 未知事件不报错：微信将来可能新增事件类型，报错会让对接方在微信加字段时
 		// 突然收不到任何推送。返回带 Event 的 Notification，由调用方决定怎么处理。
@@ -406,6 +403,18 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
+}
+
+// attachPayload 新建一个载荷对象，挂到 dst 指向的字段上，并把它作为反序列化目标返回。
+//
+// 要害是**只 new 一次**：挂上 Notification 的那个对象与拿去 Unmarshal 的必须同一实例。
+// 手写成 `notif.X, target = &X{}, &X{}` 会造出两个对象——反序列化填的是后者，调用方
+// 从前者读到的却是空载荷，于是「解析成功、字段全空」。泛型参数让这个写法不可能出现：
+// 返回值只能来自这次 new，无法再凭空凑出第二个实例。
+func attachPayload[T any](dst **T) *T {
+	v := new(T)
+	*dst = v
+	return v
 }
 
 // maxNotifyBodySize 限制推送请求体大小，防止超大报文打爆内存。
