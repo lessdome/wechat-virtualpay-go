@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import "testing"
 

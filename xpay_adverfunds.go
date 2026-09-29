@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -76,14 +76,14 @@ const (
 func checkUnixRange(begin, end int64, what string, required bool) error {
 	if required {
 		if begin <= 0 {
-			return fmt.Errorf("wechat_virtualpay_go: %s 的开始时间戳必须为正的 unix 秒（0 是 1970 年，只会是漏填）", what)
+			return fmt.Errorf("wechat_virtualpay: %s 的开始时间戳必须为正的 unix 秒（0 是 1970 年，只会是漏填）", what)
 		}
 		if end <= 0 {
-			return fmt.Errorf("wechat_virtualpay_go: %s 的结束时间戳必须为正的 unix 秒（0 是 1970 年，只会是漏填）", what)
+			return fmt.Errorf("wechat_virtualpay: %s 的结束时间戳必须为正的 unix 秒（0 是 1970 年，只会是漏填）", what)
 		}
 	}
 	if begin != 0 && end != 0 && end < begin {
-		return fmt.Errorf("wechat_virtualpay_go: %s 的结束时间(%d) 早于开始时间(%d)", what, end, begin)
+		return fmt.Errorf("wechat_virtualpay: %s 的结束时间(%d) 早于开始时间(%d)", what, end, begin)
 	}
 	return nil
 }
@@ -236,10 +236,10 @@ func (r QueryAdverFundsRequest) validate() error {
 	// 0 是「这一项不传」（omitempty 会把它省掉），所以只需要拦负数；正数就是官方说的
 	// 「不小于 1」。
 	if r.Page < 0 {
-		return fmt.Errorf("wechat_virtualpay_go: Page %d 非法，官方要求不小于 1（不传请留 0）", r.Page)
+		return fmt.Errorf("wechat_virtualpay: Page %d 非法，官方要求不小于 1（不传请留 0）", r.Page)
 	}
 	if r.PageSize < 0 {
-		return fmt.Errorf("wechat_virtualpay_go: PageSize %d 非法，每页条数不能为负（不传请留 0）", r.PageSize)
+		return fmt.Errorf("wechat_virtualpay: PageSize %d 非法，每页条数不能为负（不传请留 0）", r.PageSize)
 	}
 	if r.Filter != nil {
 		return r.Filter.validate()
@@ -346,19 +346,19 @@ type CreateFundsBillRequest struct {
 
 func (r CreateFundsBillRequest) validate() error {
 	if r.TransferAmount <= 0 {
-		return fmt.Errorf("wechat_virtualpay_go: TransferAmount 必须大于 0（单位分）——充值一笔 0 或负数的广告金没有含义")
+		return fmt.Errorf("wechat_virtualpay: TransferAmount 必须大于 0（单位分）——充值一笔 0 或负数的广告金没有含义")
 	}
 	if r.TransferAccountUID == 0 {
-		return fmt.Errorf("wechat_virtualpay_go: TransferAccountUID 不能为 0（必填，来自 QueryTransferAccount）")
+		return fmt.Errorf("wechat_virtualpay: TransferAccountUID 不能为 0（必填，来自 QueryTransferAccount）")
 	}
 	if r.TransferAccountName == "" {
-		return fmt.Errorf("wechat_virtualpay_go: TransferAccountName 不能为空（必填，来自 QueryTransferAccount）")
+		return fmt.Errorf("wechat_virtualpay: TransferAccountName 不能为空（必填，来自 QueryTransferAccount）")
 	}
 	if r.TransferAccountAgencyID == 0 {
-		return fmt.Errorf("wechat_virtualpay_go: TransferAccountAgencyID 不能为 0（必填，来自 QueryTransferAccount）")
+		return fmt.Errorf("wechat_virtualpay: TransferAccountAgencyID 不能为 0（必填，来自 QueryTransferAccount）")
 	}
 	if r.RequestID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: RequestID 不能为空——它是本接口的幂等键，空着等于放弃重试保护")
+		return fmt.Errorf("wechat_virtualpay: RequestID 不能为空——它是本接口的幂等键，空着等于放弃重试保护")
 	}
 	// 1024 这条是官方写的（「不超过 1024 字符」），不是推的。按**字符**数，不按字节——
 	// 官方那句话用的就是「字符」这个词，而一个汉字占 3 字节，拿 len() 去比会把 342 个汉字
@@ -366,7 +366,7 @@ func (r CreateFundsBillRequest) validate() error {
 	// ⚠️ 万一实测微信其实按字节算，超长的那部分（最多 4 倍）会在服务端被拒——那时把这里
 	// 换成 len() 即可，一行的事。
 	if n := utf8.RuneCountInString(r.RequestID); n > 1024 {
-		return fmt.Errorf("wechat_virtualpay_go: RequestID 超过 1024 字符（当前 %d），官方上限是 1024", n)
+		return fmt.Errorf("wechat_virtualpay: RequestID 超过 1024 字符（当前 %d），官方上限是 1024", n)
 	}
 	if err := checkUnixRange(r.SettleBegin, r.SettleEnd, "充值对应的结算周期", true); err != nil {
 		return err
@@ -434,10 +434,10 @@ type BindTransferAccountRequest struct {
 
 func (r BindTransferAccountRequest) validate() error {
 	if r.TransferAccountUID == 0 {
-		return fmt.Errorf("wechat_virtualpay_go: TransferAccountUID 不能为 0（绑定的就是它）")
+		return fmt.Errorf("wechat_virtualpay: TransferAccountUID 不能为 0（绑定的就是它）")
 	}
 	if r.TransferAccountOrgName == "" {
-		return fmt.Errorf("wechat_virtualpay_go: TransferAccountOrgName 不能为空（绑定的就是它）")
+		return fmt.Errorf("wechat_virtualpay: TransferAccountOrgName 不能为空（绑定的就是它）")
 	}
 	return nil
 }
@@ -546,10 +546,10 @@ type QueryFundsBillRequest struct {
 
 func (r QueryFundsBillRequest) validate() error {
 	if r.Page < 1 {
-		return fmt.Errorf("wechat_virtualpay_go: Page %d 非法，官方要求不小于 1（必填）", r.Page)
+		return fmt.Errorf("wechat_virtualpay: Page %d 非法，官方要求不小于 1（必填）", r.Page)
 	}
 	if r.PageSize < 1 {
-		return fmt.Errorf("wechat_virtualpay_go: PageSize %d 非法，每页条数要大于 0（必填）", r.PageSize)
+		return fmt.Errorf("wechat_virtualpay: PageSize %d 非法，每页条数要大于 0（必填）", r.PageSize)
 	}
 	return r.Filter.validate()
 }
@@ -645,7 +645,7 @@ type RecoverBillFilter struct {
 
 func (f RecoverBillFilter) validate() error {
 	if f.BillID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: RecoverBillFilter.BillID 不能为空（官方字段表标必填，说明文字却写「可选」——本包按必填处理，见字段注释）")
+		return fmt.Errorf("wechat_virtualpay: RecoverBillFilter.BillID 不能为空（官方字段表标必填，说明文字却写「可选」——本包按必填处理，见字段注释）")
 	}
 	return checkUnixRange(f.RecoverTimeBegin, f.RecoverTimeEnd, "RecoverBillFilter 的回收时间", true)
 }
@@ -664,10 +664,10 @@ type QueryRecoverBillRequest struct {
 
 func (r QueryRecoverBillRequest) validate() error {
 	if r.Page < 1 {
-		return fmt.Errorf("wechat_virtualpay_go: Page %d 非法，官方要求不小于 1（必填）", r.Page)
+		return fmt.Errorf("wechat_virtualpay: Page %d 非法，官方要求不小于 1（必填）", r.Page)
 	}
 	if r.PageSize < 1 {
-		return fmt.Errorf("wechat_virtualpay_go: PageSize %d 非法，每页条数要大于 0（必填）", r.PageSize)
+		return fmt.Errorf("wechat_virtualpay: PageSize %d 非法，每页条数要大于 0（必填）", r.PageSize)
 	}
 	return r.Filter.validate()
 }
@@ -751,7 +751,7 @@ type DownloadAdverFundsOrderRequest struct {
 
 func (r DownloadAdverFundsOrderRequest) validate() error {
 	if r.FundID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: FundID 不能为空（来自 QueryAdverFunds 的 FundID）")
+		return fmt.Errorf("wechat_virtualpay: FundID 不能为空（来自 QueryAdverFunds 的 FundID）")
 	}
 	return nil
 }

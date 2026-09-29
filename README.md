@@ -1,6 +1,6 @@
-# wechat_virtualpay_go
+# wechat_virtualpay
 
-[![CI](https://github.com/lessdome/wechat_virtualpay_go/actions/workflows/ci.yml/badge.svg)](https://github.com/lessdome/wechat_virtualpay_go/actions/workflows/ci.yml)
+[![CI](https://github.com/lessdome/wechat_virtualpay/actions/workflows/ci.yml/badge.svg)](https://github.com/lessdome/wechat_virtualpay/actions/workflows/ci.yml)
 
 微信小程序**虚拟支付**的服务端 Go SDK。Go 1.21+，**零第三方依赖**（只用标准库）。
 
@@ -8,7 +8,7 @@
 （`wx.login`、`wx.requestVirtualPayment`）在客户端，不在这里。
 
 包级概览（错误契约、三档鉴权、凭据与环境、金额单位）在
-[`doc.go`](https://pkg.go.dev/github.com/lessdome/wechat_virtualpay_go) 里，`go doc .` 就能读到；
+[`doc.go`](https://pkg.go.dev/github.com/lessdome/wechat_virtualpay) 里，`go doc .` 就能读到；
 本文件负责的是**入门路径**和**协议层的坑**。单接口的字段表与逐条存疑在各函数自己的注释里。
 
 ## 当前状态
@@ -37,18 +37,17 @@ go test -race ./...    # 全部测试，无需任何真实凭证（网络层都�
 ## 安装
 
 ```bash
-go get github.com/lessdome/wechat_virtualpay_go
+go get github.com/lessdome/wechat_virtualpay
 ```
 
-模块路径带下划线（仓库目录名是 `wechat-virtualpay-go`），导入路径与包名都是
-`wechat_virtualpay_go`。
+导入路径与包名都是 `wechat_virtualpay`（包名带下划线是有意保留的，与模块路径尾一致）。
 
 ## 四步走通
 
 ### 1. 换应用级凭证
 
 ```go
-tok, err := wechat_virtualpay_go.GetStableAccessToken(ctx, appID, appSecret, false)
+tok, err := wechat_virtualpay.GetStableAccessToken(ctx, appID, appSecret, false)
 if err != nil {
     return err // 这一趟没走通
 }
@@ -63,7 +62,7 @@ if tok.ErrCode != 0 {
 ### 2. 换用户登录态
 
 ```go
-sess, err := wechat_virtualpay_go.Code2Session(ctx, appID, appSecret, code)
+sess, err := wechat_virtualpay.Code2Session(ctx, appID, appSecret, code)
 // sess.OpenID / sess.SessionKey / sess.UnionID
 ```
 
@@ -76,9 +75,9 @@ code 五分钟有效且只能用一次；`SessionKey` 也会过期（服务端�
 服务端**不发起支付请求**——它只拼参数、算签名，然后把结果交给小程序端拉起支付：
 
 ```go
-p, err := wechat_virtualpay_go.BuildPayment(offerID, appKey, sess.SessionKey,
-    wechat_virtualpay_go.PaymentRequest{
-        Mode:       wechat_virtualpay_go.ModeShortSeriesGoods, // 或 ModeShortSeriesCoin
+p, err := wechat_virtualpay.BuildPayment(offerID, appKey, sess.SessionKey,
+    wechat_virtualpay.PaymentRequest{
+        Mode:       wechat_virtualpay.ModeShortSeriesGoods, // 或 ModeShortSeriesCoin
         ProductID:  "prod_001",                                // 仅道具直购
         GoodsPrice: 100,                                       // 单位：分，仅道具直购
         Quantity:   1,
@@ -108,30 +107,30 @@ signature = sha1( sort([Token, timestamp, nonce]).join("") )
 `ParseNotification` 自己读请求的 body 与这三个参数，验签失败返回 `ErrInvalidSignature`：
 
 ```go
-notif, err := wechat_virtualpay_go.ParseNotification(token, r)
+notif, err := wechat_virtualpay.ParseNotification(token, r)
 if err != nil {
     // 验签或格式不过：回失败应答让微信重试，**绝不要发货**
-    writeJSON(w, wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()})
+    writeJSON(w, wechat_virtualpay.Ack{ErrCode: 1, ErrMsg: err.Error()})
     return
 }
 
-ack := wechat_virtualpay_go.Ack{ErrCode: 0, ErrMsg: "success"}
+ack := wechat_virtualpay.Ack{ErrCode: 0, ErrMsg: "success"}
 switch notif.Event {
-case wechat_virtualpay_go.EventGoodsDeliver:
+case wechat_virtualpay.EventGoodsDeliver:
     // 幂等键是平台单号 WeChatPayInfo.MchOrderNo；它可能为 nil，取值前先判空
     if err := deliver(notif.GoodsDeliver); err != nil {
-        ack = wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()} // 微信会重试
+        ack = wechat_virtualpay.Ack{ErrCode: 1, ErrMsg: err.Error()} // 微信会重试
     }
-case wechat_virtualpay_go.EventIOSRefundQuery:
+case wechat_virtualpay.EventIOSRefundQuery:
     // ⚠️ 这条路径只有 3 秒，不要查库、不要调外部接口
-    writeJSON(w, wechat_virtualpay_go.IOSRefundQueryResponse{
+    writeJSON(w, wechat_virtualpay.IOSRefundQueryResponse{
         ResultCode: 0, // 0=放过、建议退款；1=拦截、拒绝退款
         ResultInfo: "已发货，不予退款",
         Evidence:   "该订单已于 2026-01-01 发放并被用户领取", // 必填，退款审计要看
     })
     return
 default:
-    ack = wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: "未知事件: " + string(notif.Event)}
+    ack = wechat_virtualpay.Ack{ErrCode: 1, ErrMsg: "未知事件: " + string(notif.Event)}
 }
 writeJSON(w, ack)
 ```

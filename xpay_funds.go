@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"context"
@@ -69,7 +69,7 @@ type CreateWithdrawOrderRequest struct {
 
 func (r CreateWithdrawOrderRequest) validate() error {
 	if !withdrawNoRe.MatchString(r.WithdrawNo) {
-		return fmt.Errorf("wechat_virtualpay_go: WithdrawNo %q 非法，须为 8–32 位字母/数字/_/-", r.WithdrawNo)
+		return fmt.Errorf("wechat_virtualpay: WithdrawNo %q 非法，须为 8–32 位字母/数字/_/-", r.WithdrawNo)
 	}
 	// WithdrawAmount 不查写法（留空是「全额提现」，合法），理由见文件头。
 	return nil
@@ -147,7 +147,7 @@ type QueryWithdrawOrderRequest struct {
 
 func (r QueryWithdrawOrderRequest) validate() error {
 	if r.WithdrawNo == "" {
-		return fmt.Errorf("wechat_virtualpay_go: WithdrawNo 不能为空（由 CreateWithdrawOrder 返回）")
+		return fmt.Errorf("wechat_virtualpay: WithdrawNo 不能为空（由 CreateWithdrawOrder 返回）")
 	}
 	// 这里**只查非空**，不查创建那一页的 [8,32] 格式：查询是**读**路径，而单号是创建那一步
 	// 的产物——历史上创建出来的单号未必满足今天写在文档上的规范，读它不该被格式挡住。

@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"bytes"
@@ -79,7 +79,7 @@ type AccessTokenResponse struct {
 // JSON）；**业务失败不是 error**——appid/secret 不对时响应里 ErrCode 非 0（40013 = appid
 // 无效、40125 = secret 无效、40164 = 调用 IP 不在白名单），err 是 nil。
 //
-//	resp, err := wechat_virtualpay_go.GetStableAccessToken(ctx, appID, appSecret, false)
+//	resp, err := wechat_virtualpay.GetStableAccessToken(ctx, appID, appSecret, false)
 //	if err != nil {
 //		return err // 这一趟没走通
 //	}
@@ -104,11 +104,11 @@ func GetStableAccessToken(ctx context.Context, appID, appSecret string, forceRef
 
 	raw, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: GetStableAccessToken 序列化请求体失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: GetStableAccessToken 序列化请求体失败: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, stableTokenURL, bytes.NewReader(raw))
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: GetStableAccessToken 构造请求失败: %w", stripURLError(err))
+		return nil, fmt.Errorf("wechat_virtualpay: GetStableAccessToken 构造请求失败: %w", stripURLError(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -149,7 +149,7 @@ func GetAccessToken(ctx context.Context, appID, appSecret string) (*AccessTokenR
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, accessTokenURL+"?"+q.Encode(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: GetAccessToken 构造请求失败: %w", stripURLError(err))
+		return nil, fmt.Errorf("wechat_virtualpay: GetAccessToken 构造请求失败: %w", stripURLError(err))
 	}
 	rawResp, err := tokenHTTPDo(req, "GetAccessToken")
 	if err != nil {
@@ -161,10 +161,10 @@ func GetAccessToken(ctx context.Context, appID, appSecret string) (*AccessTokenR
 // checkCredentials 校验两个接口共用的必填参数。
 func checkCredentials(appID, appSecret string) error {
 	if appID == "" {
-		return fmt.Errorf("wechat_virtualpay_go: appID 不能为空")
+		return fmt.Errorf("wechat_virtualpay: appID 不能为空")
 	}
 	if appSecret == "" {
-		return fmt.Errorf("wechat_virtualpay_go: appSecret 不能为空")
+		return fmt.Errorf("wechat_virtualpay: appSecret 不能为空")
 	}
 	return nil
 }
@@ -176,18 +176,18 @@ func tokenHTTPDo(req *http.Request, name string) ([]byte, error) {
 	if err != nil {
 		// 先摘掉 URL：旧接口把 secret 挂在 query 上，Go 的错误文案会连它一起带出来
 		// （见 stripURLError）。
-		return nil, fmt.Errorf("wechat_virtualpay_go: %s 请求失败: %w", name, stripURLError(err))
+		return nil, fmt.Errorf("wechat_virtualpay: %s 请求失败: %w", name, stripURLError(err))
 	}
 	defer resp.Body.Close()
 
 	rawResp, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: %s 读取响应失败: %w", name, err)
+		return nil, fmt.Errorf("wechat_virtualpay: %s 读取响应失败: %w", name, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		// 非 200 时响应体不是微信的报文，状态码只能进文案；原始响应一并带上（网关的 502
 		// 页面里常写着真正的原因）。
-		return nil, fmt.Errorf("wechat_virtualpay_go: %s 返回 HTTP %d %s（原始响应: %s）",
+		return nil, fmt.Errorf("wechat_virtualpay: %s 返回 HTTP %d %s（原始响应: %s）",
 			name, resp.StatusCode, http.StatusText(resp.StatusCode), rawResp)
 	}
 	return rawResp, nil
@@ -198,7 +198,7 @@ func tokenHTTPDo(req *http.Request, name string) ([]byte, error) {
 func parseAccessToken(rawResp []byte) (*AccessTokenResponse, error) {
 	var out AccessTokenResponse
 	if err := json.Unmarshal(rawResp, &out); err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 解析响应失败: %w（原始响应: %s）", err, rawResp)
+		return nil, fmt.Errorf("wechat_virtualpay: 解析响应失败: %w（原始响应: %s）", err, rawResp)
 	}
 	if out.ErrCode != 0 {
 		return &out, nil // 业务失败不是 error：errcode/errmsg 原值返回
@@ -206,7 +206,7 @@ func parseAccessToken(rawResp []byte) (*AccessTokenResponse, error) {
 	if out.AccessToken == "" {
 		// errcode=0 却没回凭证：报文不对，按「没拿到可用的响应」处理——放过去，调用方会
 		// 拿着一把空号去调业务接口。
-		return nil, fmt.Errorf("wechat_virtualpay_go: 响应里没有 access_token（原始响应: %s）", rawResp)
+		return nil, fmt.Errorf("wechat_virtualpay: 响应里没有 access_token（原始响应: %s）", rawResp)
 	}
 	return &out, nil
 }

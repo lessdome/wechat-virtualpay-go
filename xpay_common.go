@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"errors"
@@ -27,7 +27,7 @@ import (
 // checkAccessToken 校验接口调用凭证。
 func checkAccessToken(v string) error {
 	if v == "" {
-		return fmt.Errorf("wechat_virtualpay_go: accessToken 不能为空")
+		return fmt.Errorf("wechat_virtualpay: accessToken 不能为空")
 	}
 	return nil
 }
@@ -42,7 +42,7 @@ func checkAccessToken(v string) error {
 // 之间怎么互相赋值都编不过（两侧类型不同名）。保险还在，只是挂在了它该挂的那一侧。
 func checkEnv(v int) error {
 	if v != 0 && v != 1 {
-		return fmt.Errorf("wechat_virtualpay_go: Env %d 非法，取值只有 0（现网）/ 1（沙箱）", v)
+		return fmt.Errorf("wechat_virtualpay: Env %d 非法，取值只有 0（现网）/ 1（沙箱）", v)
 	}
 	return nil
 }
@@ -59,7 +59,7 @@ func checkAppKey(appKey string, env int) error {
 		if env == 1 { // 沙箱
 			which = "沙箱"
 		}
-		return fmt.Errorf("wechat_virtualpay_go: appKey 不能为空（Env=%d 须配%s AppKey——官方写明两把 key 不能混）", env, which)
+		return fmt.Errorf("wechat_virtualpay: appKey 不能为空（Env=%d 须配%s AppKey——官方写明两把 key 不能混）", env, which)
 	}
 	return nil
 }
@@ -71,7 +71,7 @@ func checkAppKey(appKey string, env int) error {
 // 该配哪把 key 由接口所在的环境决定——调用方自己知道，本包这里只拦空串。
 func checkAppKeyNoEnv(appKey string) error {
 	if appKey == "" {
-		return fmt.Errorf("wechat_virtualpay_go: appKey 不能为空（算 pay_sig 用；本接口的请求体没有 env 字段，key 与环境由调用方自己配对）")
+		return fmt.Errorf("wechat_virtualpay: appKey 不能为空（算 pay_sig 用；本接口的请求体没有 env 字段，key 与环境由调用方自己配对）")
 	}
 	return nil
 }
@@ -88,7 +88,7 @@ func checkAppKeyNoEnv(appKey string) error {
 // Code2Session 换一把。
 func checkSessionKey(v string) error {
 	if v == "" {
-		return fmt.Errorf("wechat_virtualpay_go: sessionKey 不能为空（用 Code2Session 换取）")
+		return fmt.Errorf("wechat_virtualpay: sessionKey 不能为空（用 Code2Session 换取）")
 	}
 	return nil
 }
@@ -116,14 +116,14 @@ func parseDay8(v int64) (time.Time, error) {
 func checkDayRange(begin, end int64) error {
 	b, err := parseDay8(begin)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: BeginDs %d 不是合法的 YYYYMMDD 日期", begin)
+		return fmt.Errorf("wechat_virtualpay: BeginDs %d 不是合法的 YYYYMMDD 日期", begin)
 	}
 	e, err := parseDay8(end)
 	if err != nil {
-		return fmt.Errorf("wechat_virtualpay_go: EndDs %d 不是合法的 YYYYMMDD 日期", end)
+		return fmt.Errorf("wechat_virtualpay: EndDs %d 不是合法的 YYYYMMDD 日期", end)
 	}
 	if e.Before(b) {
-		return fmt.Errorf("wechat_virtualpay_go: EndDs(%d) 早于 BeginDs(%d)", end, begin)
+		return fmt.Errorf("wechat_virtualpay: EndDs(%d) 早于 BeginDs(%d)", end, begin)
 	}
 	return nil
 }

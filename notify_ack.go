@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 // 本文件提供推送应答的**数据模型**，不含任何生成函数——应答的字节由使用者自己
 // json.Marshal 写出去，Content-Type 用 application/json; charset=utf-8。
@@ -17,7 +17,7 @@ package wechat_virtualpay_go
 
 // Ack 是普通推送事件的应答（ErrCode 方式）。
 //
-//	body, _ := json.Marshal(wechat_virtualpay_go.Ack{ErrCode: 0, ErrMsg: "success"})
+//	body, _ := json.Marshal(wechat_virtualpay.Ack{ErrCode: 0, ErrMsg: "success"})
 //	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 //	w.Write(body)
 //
@@ -45,7 +45,7 @@ type Ack struct {
 // 这条问询的应答**不是** Ack 那种 ErrCode 形态，只能用它——回错了微信当无效应答，
 // 而 Apple 只问询三次、每次 3 秒，错过等于把判定权交出去。
 //
-//	body, _ := json.Marshal(wechat_virtualpay_go.IOSRefundQueryResponse{
+//	body, _ := json.Marshal(wechat_virtualpay.IOSRefundQueryResponse{
 //		ResultCode: 0,
 //		ResultInfo: "已发货，不予退款",
 //		Evidence:   "该订单已于 2026-01-01 发放并被用户领取",

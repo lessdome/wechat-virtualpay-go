@@ -1,3 +1,3 @@
-module github.com/lessdome/wechat_virtualpay_go
+module github.com/lessdome/wechat_virtualpay
 
 go 1.21

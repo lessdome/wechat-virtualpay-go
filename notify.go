@@ -1,4 +1,4 @@
-package wechat_virtualpay_go
+package wechat_virtualpay
 
 import (
 	"bytes"
@@ -46,7 +46,7 @@ const (
 //
 // 但反过来不成立：**验签通过不等于报文可信**——签的只有 URL 上的 token/timestamp/
 // nonce，报文体不在其中。详细说明见 notify_verify.go 开头。
-var ErrInvalidSignature = errors.New("wechat_virtualpay_go: 推送验签失败")
+var ErrInvalidSignature = errors.New("wechat_virtualpay: 推送验签失败")
 
 // Notification 是一次解析后的推送。
 //
@@ -325,22 +325,22 @@ type IOSRefundQueryNotify struct {
 //
 // 典型用法：
 //
-//	notif, err := wechat_virtualpay_go.ParseNotification(token, r)
+//	notif, err := wechat_virtualpay.ParseNotification(token, r)
 //	if err != nil {
-//		writeJSON(w, wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()}) // 让微信重试
+//		writeJSON(w, wechat_virtualpay.Ack{ErrCode: 1, ErrMsg: err.Error()}) // 让微信重试
 //		return
 //	}
-//	ack := wechat_virtualpay_go.Ack{ErrCode: 0, ErrMsg: "success"}
+//	ack := wechat_virtualpay.Ack{ErrCode: 0, ErrMsg: "success"}
 //	switch notif.Event {
-//	case wechat_virtualpay_go.EventGoodsDeliver:
+//	case wechat_virtualpay.EventGoodsDeliver:
 //		if err := deliver(notif.GoodsDeliver); err != nil { // 幂等发货…
-//			ack = wechat_virtualpay_go.Ack{ErrCode: 1, ErrMsg: err.Error()}
+//			ack = wechat_virtualpay.Ack{ErrCode: 1, ErrMsg: err.Error()}
 //		}
 //	}
 //	writeJSON(w, ack)
 func ParseNotification(token string, r *http.Request) (*Notification, error) {
 	if token == "" {
-		return nil, errors.New("wechat_virtualpay_go: token 不能为空（MP 后台「消息推送配置」里的 Token 令牌）")
+		return nil, errors.New("wechat_virtualpay: token 不能为空（MP 后台「消息推送配置」里的 Token 令牌）")
 	}
 	body, err := readAllLimited(r)
 	if err != nil {
@@ -349,19 +349,19 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 	query := r.URL.Query()
 
 	if len(bytes.TrimSpace(body)) == 0 {
-		return nil, errors.New("wechat_virtualpay_go: 推送请求体为空")
+		return nil, errors.New("wechat_virtualpay: 推送请求体为空")
 	}
 
 	timestamp := query.Get("timestamp")
 	nonce := query.Get("nonce")
 	if timestamp == "" || nonce == "" {
-		return nil, errors.New("wechat_virtualpay_go: 推送请求缺少 timestamp 或 nonce")
+		return nil, errors.New("wechat_virtualpay: 推送请求缺少 timestamp 或 nonce")
 	}
 
 	// 本包只支持明文模式。后台若配成安全模式，报文是 AES 加密的，这里直接说清楚，
 	// 而不是丢一个含糊的「解析失败」出去。
 	if query.Get("encrypt_type") == "aes" {
-		return nil, errors.New("wechat_virtualpay_go: 收到安全模式推送，但本包只支持明文模式——请到 MP 后台把「消息加解密方式」改为明文模式")
+		return nil, errors.New("wechat_virtualpay: 收到安全模式推送，但本包只支持明文模式——请到 MP 后台把「消息加解密方式」改为明文模式")
 	}
 	if !verifySignature(token, timestamp, nonce, query.Get("signature")) {
 		return nil, ErrInvalidSignature
@@ -372,7 +372,7 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 		Event string `json:"Event"`
 	}
 	if err := json.Unmarshal(body, &header); err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 解析推送事件头失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: 解析推送事件头失败: %w", err)
 	}
 
 	notif := &Notification{
@@ -387,7 +387,7 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 			// 完全没有 Event，说明这根本不是一条推送。
 			// ⚠️ 这里**不能**放行：调用方会把「解析成功」当成「收到了真实推送」，
 			// 照常回成功应答，微信便不再重推——这条推送就永久丢了。
-			return nil, errors.New("wechat_virtualpay_go: 推送报文里没有 Event 字段，无法识别事件类型")
+			return nil, errors.New("wechat_virtualpay: 推送报文里没有 Event 字段，无法识别事件类型")
 		}
 		notif.Event = EventIOSRefundQuery
 	}
@@ -413,7 +413,7 @@ func ParseNotification(token string, r *http.Request) (*Notification, error) {
 	}
 
 	if err := json.Unmarshal(body, target); err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 解析 %s 事件失败: %w", notif.Event, err)
+		return nil, fmt.Errorf("wechat_virtualpay: 解析 %s 事件失败: %w", notif.Event, err)
 	}
 	return notif, nil
 }
@@ -435,16 +435,16 @@ const maxNotifyBodySize = 1 << 20 // 1 MiB
 
 func readAllLimited(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
-		return nil, errors.New("wechat_virtualpay_go: 推送请求没有 body")
+		return nil, errors.New("wechat_virtualpay: 推送请求没有 body")
 	}
 	defer r.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxNotifyBodySize+1))
 	if err != nil {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 读取推送请求体失败: %w", err)
+		return nil, fmt.Errorf("wechat_virtualpay: 读取推送请求体失败: %w", err)
 	}
 	if len(body) > maxNotifyBodySize {
-		return nil, fmt.Errorf("wechat_virtualpay_go: 推送请求体超过 %d 字节上限", maxNotifyBodySize)
+		return nil, fmt.Errorf("wechat_virtualpay: 推送请求体超过 %d 字节上限", maxNotifyBodySize)
 	}
 	return body, nil
 }
