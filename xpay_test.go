@@ -497,7 +497,7 @@ func TestHTTPErrorIsPlainError(t *testing.T) {
 // ——碰 nil 响应立刻 panic；要是返回值类型，他会拿到一个 errcode=0 的零值响应，而那恰好
 // 是本包契约里「成功」的样子，一路静默错下去。
 //
-// 11 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
+// 14 个方法各写各的 `return nil, err`，漏一个就少一个护栏，所以逐个过一遍；失败源取三种：
 // 参数没过本地校验（一个字节都没发出去）、非 200、网络失败。
 func TestErrorReturnsNilResponse(t *testing.T) {
 	provided := true
@@ -559,6 +559,21 @@ func TestErrorReturnsNilResponse(t *testing.T) {
 		"DownloadIOSBill": func(tk string) (bool, error) {
 			r, err := DownloadIOSBill(context.Background(), tk, "K",
 				DownloadIOSBillRequest{StartMonth: "202601", EndMonth: "202603"})
+			return r == nil, err
+		},
+		// 资金类 3 个。
+		"CreateWithdrawOrder": func(tk string) (bool, error) {
+			r, err := CreateWithdrawOrder(context.Background(), tk, "K",
+				CreateWithdrawOrderRequest{WithdrawNo: "W1234567", WithdrawAmount: "0.01"})
+			return r == nil, err
+		},
+		"QueryWithdrawOrder": func(tk string) (bool, error) {
+			r, err := QueryWithdrawOrder(context.Background(), tk, "K",
+				QueryWithdrawOrderRequest{WithdrawNo: "W1234567"})
+			return r == nil, err
+		},
+		"QueryBizBalance": func(tk string) (bool, error) {
+			r, err := QueryBizBalance(context.Background(), tk, "K", QueryBizBalanceRequest{})
 			return r == nil, err
 		},
 	}
